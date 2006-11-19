@@ -1,0 +1,50 @@
+# Portuguese translation for php5's debconf messages.
+# 2005, Miguel Figueiredo <elmig@debianpt.org>
+msgid ""
+msgstr ""
+"Project-Id-Version: php5 4:4.3.10-10\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2005-08-04 21:13+1000\n"
+"PO-Revision-Date: 2005-04-17 14:05+0000\n"
+"Last-Translator: Miguel Figueiredo <elmig@debianpt.org>\n"
+"Language-Team: Portuguese <traduz@debianpt.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#. Type: boolean
+#. Description
+#: ../php4-suhosin.templates:4
+msgid "Should ${extname} be added to /etc/php4/${sapiconfig}/php.ini?"
+msgstr "Deve ${extname} ser adicionado a /etc/php4/${sapiconfig}/php.ini?"
+
+#. Type: boolean
+#. Description
+#: ../php4-suhosin.templates:4
+msgid ""
+"You are installing ${extname} support for php4, and it is not yet enabled in "
+"the configuration for the ${sapiconfig} SAPI.  Do you want this extension to "
+"be enabled now?"
+msgstr ""
+"Você está a instalar suporte ${extname} para php4, e ainda não está activado "
+"na configuração para SAPI ${sapiconfig}.  Você deseja que esta extenção seja "
+"activada agora?"
+
+#. Type: boolean
+#. Description
+#: ../php4-suhosin.templates:12
+msgid "Should ${extname} be removed from /etc/php4/${sapiconfig}/php.ini?"
+msgstr "Deve ${extname} ser removido de /etc/php4/${sapiconfig}/php.ini?"
+
+#. Type: boolean
+#. Description
+#: ../php4-suhosin.templates:12
+msgid ""
+"You are removing ${extname} support for php4, but it is still enabled in the "
+"configuration for the ${sapiconfig} SAPI.  Leaving this in place will "
+"probably cause problems when trying to use PHP."
+msgstr ""
+"Você está a remover o suporte ${extname} para php4, mas ainda está activado "
+"na configuração para SAPI ${sapiconfig}.  Deixá-lo provavelmente pode causar "
+"problemas quando tentar utilizar PHP."
+

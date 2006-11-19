@@ -1,0 +1,55 @@
+# php5 (debconf) translation to Catalan.
+# Copyright (C) 2004 Free Software Foundation, Inc.
+# Aleix Badia i Bosch <abadia@ica.es>, 2004
+# Josep Lladonosa i Capell <jlladono@pie.xtec.es>, 2004
+# Steve Langasek <vorlon@debian.org>, 2004
+# Jordi Mallach <jordi@debian.org>, 2004
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: php5_4:4.3.3-5_templates\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2005-08-04 21:13+1000\n"
+"PO-Revision-Date: 2004-01-31 19:46GMT\n"
+"Last-Translator: Aleix Badia i Bosch <abadia@ica.es>\n"
+"Language-Team: Debian L10n Catalan <debian-l10n-catalan@lists.debian.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#. Type: boolean
+#. Description
+#: ../php4-suhosin.templates:4
+msgid "Should ${extname} be added to /etc/php4/${sapiconfig}/php.ini?"
+msgstr "Voleu afegir l'extensió ${extname} a /etc/php4/${sapiconfig}/php.ini?"
+
+#. Type: boolean
+#. Description
+#: ../php4-suhosin.templates:4
+msgid ""
+"You are installing ${extname} support for php4, and it is not yet enabled in "
+"the configuration for the ${sapiconfig} SAPI.  Do you want this extension to "
+"be enabled now?"
+msgstr ""
+"Esteu instal·lant el suport de ${extname} per a php4 i encara no està "
+"habilitat a la configuració per al SAPI ${sapiconfig}. Voleu habilitar "
+"aquesta extensió?"
+
+#. Type: boolean
+#. Description
+#: ../php4-suhosin.templates:12
+msgid "Should ${extname} be removed from /etc/php4/${sapiconfig}/php.ini?"
+msgstr ""
+"Voleu suprimir l'extensió ${extname} de /etc/php4/${sapiconfig}/php.ini?"
+
+#. Type: boolean
+#. Description
+#: ../php4-suhosin.templates:12
+msgid ""
+"You are removing ${extname} support for php4, but it is still enabled in the "
+"configuration for the ${sapiconfig} SAPI.  Leaving this in place will "
+"probably cause problems when trying to use PHP."
+msgstr ""
+"S'està suprimint el suport de l'extensió ${extname} per a php4 però continua "
+"habilitat a la configuració per al SAPI ${sapiconfig}. Si ho deixeu activat "
+"pot provocar problemes a l'intentar utilitzar el php."
