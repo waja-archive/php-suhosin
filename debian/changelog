@@ -1,0 +1,64 @@
+php-suhosin (0.9.12-1) unstable; urgency=low
+
+  * new upstream
+  * fixed address of "Free Software Foundation, Inc." in changelog 
+
+ -- Jan Wagner <waja@cyconet.org>  Sun, 17 Nov 2006 15:41:36 +0100
+
+php-suhosin (0.9.11-2) unstable; urgency=low
+
+  [ Jan Wagner ]
+  * drop debian/po
+
+  [ Alexander Wirt ]
+  * Update debian/copyright 
+
+ -- Alexander Wirt <formorer@debian.org>  Sun, 12 Nov 2006 20:09:02 +0100
+
+php-suhosin (0.9.11-1) unstable; urgency=low
+
+  [ Jan Wagner ]
+  * New upstream release
+
+  [ Alexander Wirt ]
+  * Initial debian upload (Closes: #392119)
+
+ -- Alexander Wirt <formorer@debian.org>  Sat, 11 Nov 2006 11:37:38 +0100
+
+php-suhosin (0.9.10-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Jan Wagner <waja@cyconet.org>  Thu,  2 Nov 2006 12:50:36 +0000
+
+php-suhosin (0.9.8-1) unstable; urgency=low
+
+  * new upstream
+
+ -- Jan Wagner <waja@cyconet.org>  Tue, 10 Oct 2006 15:46:39 +0200
+
+php-suhosin (0.9.6-2) unstable; urgency=low
+
+  * fixed up some po related stuff (make lintian happy)
+
+ -- Jan Wagner <waja@cyconet.org>  Tue, 10 Oct 2006 15:07:28 +0200
+
+php-suhosin (0.9.6-1) unstable; urgency=low
+
+  * Added build depency to re2c (>=0.9.11)
+
+ -- Jan Wagner <waja@cyconet.org>  Fri, 06 Oct 2006 14:09:37 +0200
+
+php-suhosin (0.9.6-1~cyconet.1) unstable; urgency=low
+
+  * Initial release
+  * Use the config.m4 from the php4 version of the suhosin extension, because
+    the php4 "phpize" can't cope with one of the tests in the php5 version.
+  * Use a dirty dpkg-gencontrol hack to make sure php4-suhosin has an epoch.
+  * Make sure we get our docs in our own doc directory, instead of dumping
+    them in /usr/share/doc/php[45]-common, in case we're upgrading.
+  * Use the new php-config[45] --phpapi option, and build-depend on new
+    enough versions of php[45]-dev to make sure we have it available to us.
+  * included mbstrings header of php5-5.1.6-1 in buildtree
+
+ -- Jan Wagner <waja@cyconet.org>  Thu, 05 Oct 2006 14:09:37 +0200

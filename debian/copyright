@@ -1,0 +1,136 @@
+This package was debianized by Jan Wagner <waja@cyconet.org> on
+Thu, 05 Oct 2006 13:58:18 +1000
+
+It was downloaded from http://www.hardened-php.net/suhosin/download.html
+
+Upstream Authors: Stefan Esser <sesser@hardened-php.net>
+
+Copyright Holders (in alphabetical order):
+	Edin Kadribasic
+	Free Software Foundation, Inc.
+	Jani Taskinen <sniper@php.net>
+	Jochen Obalek <jochen.obalek@bigfoot.de>
+	Mike Scott <mike@compapp.dcu.ie>
+	Rasmus Lerdorf <rasmus@php.net>
+	Solar Designer <solar at openwall.com>
+	Stefan Esser <sesser@hardened-php.net>
+	Takahiro Tanimoto <matz@netlab.co.jp>
+	The Hardened-PHP Project
+	The PHP Group
+
+Licenses:
+
+	File aes.c
+	Copyright (c) 1999 Mike Scott <mike@compapp.dcu.ie>
+	License: Public Domain
+
+	Permission for free direct or derivative use is granted subject to
+	compliance with any conditions that the originators of the algorithm
+	place on its exploitation.
+
+	File crypt_blowfish.c
+	Copyright (c) 1998-2002 Solar Designer <solar at openwall.com>
+	License: Public Domain
+
+	It is my intent that you should be able to use this on your system, as
+	a part of a software package, or anywhere else to improve security,
+	ensure compatibility, or for any other purpose. I would appreciate it
+	if you give credit where it is due and keep your modifications in the
+	public domain as well, but I don't require that in order to let you
+	place this code and any modifications you make under a license of your
+	choice.
+
+	Files crypt_md5.c
+	      crypt_md5.h
+	Copyright (c) 1997-2006 The PHP Group
+		Edin Kadribasic
+	License: PHP license 3.01
+
+	Files crypt_win32.c
+	      crypt_win32.h
+	Copyright (C) 1991 Jochen Obalek <jochen.obalek@bigfoot.de>
+	License: PHP license 3.01
+
+	File rfc1867.c
+	Copyright (c) 1997-2006 The PHP Group
+		Rasmus Lerdorf <rasmus@php.net>
+		Jani Taskinen <sniper@php.net>
+	License: PHP license 3.01
+
+	File mbregex/mbregex.h
+	Copyright (C) 1985,89,90,91,92,93,95,96,97,98 Free Software Foundation, Inc.
+		Takahiro Tanimoto <matz@netlab.co.jp>
+	License: GNU General Public License
+
+	This file is part of the GNU C Library.  Its master source is NOT part 
+	of the C library, however.  The master source lives in /gd/gnu/lib.
+
+	The GNU C Library is free software; you can redistribute it and/or
+	modify it under the terms of the GNU Library General Public License as
+	published by the Free Software Foundation; either version 2 of the
+	License, or (at your option) any later version.
+
+	The GNU C Library is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+	Library General Public License for more details.
+
+	You should have received a copy of the GNU Library General Public
+	License along with the GNU C Library; see the file COPYING.LIB.  If
+	not, write to the Free Software Foundation, Inc., 51 Franklin St,
+	Fifth Floor, Boston, MA 02110-1301, USA.
+
+	On Debian systems, the complete text of the GNU General Public License
+	can be found in /usr/share/common-licenses/GPL file.
+
+	All other files:
+	Copyright (c) 2006 The Hardened-PHP Project
+		Stefan Esser <sesser@hardened-php.net>
+	License: PHP license 3.01
+
+	--------------------------------------------------------------------
+	                  The PHP License, version 3.01
+	Copyright (c) 1999 - 2006 The PHP Group. All rights reserved.
+	--------------------------------------------------------------------
+
+	Redistribution and use in source and binary forms, with or without
+	modification, is permitted provided that the following conditions are 
+	met:
+
+	  1. Redistributions of source code must retain the above copyright
+	     notice, this list of conditions and the following disclaimer.
+ 
+	  2. Redistributions in binary form must reproduce the above copyright
+	     notice, this list of conditions and the following disclaimer in
+	     the documentation and/or other materials provided with the
+	     distribution.
+ 
+	  3. The name "PHP" must not be used to endorse or promote products
+	     derived from this software without prior written permission. For
+	     written permission, please contact group@php.net.
+  
+	  4. Products derived from this software may not be called "PHP", nor
+	     may "PHP" appear in their name, without prior written permission
+	     from group@php.net.  You may indicate that your software works in
+	     conjunction with PHP by saying "Foo for PHP" instead of calling it
+	     "PHP Foo" or "phpfoo"
+ 
+	  5. The PHP Group may publish revised and/or new versions of the
+	     license from time to time. Each version will be given a
+	     distinguishing version number.
+	     Once covered code has been published under a particular version of
+	     the license, you may always continue to use it under the terms of
+	     that version. You may also choose to use such covered code under
+	     the terms of any subsequent version of the license published by
+	     the PHP Group. No one other than the PHP Group has the right to
+	     modify the terms applicable to covered code created under this
+	     License.
+
+	  6. Redistributions of any form whatsoever must retain the following
+	     acknowledgment:
+	     "This product includes PHP software, freely available from
+	     <http://www.php.net/software/>".
+
+The Debian packaging is (C) 2006, Jan Wagner <waja@cyconet.org>,
+Alexander Wirt <formorer@debian.org> and is licensed under the GPL, see
+`/usr/share/common-licenses/GPL'.
