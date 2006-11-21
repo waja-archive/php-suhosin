@@ -1,3 +1,9 @@
+php-suhosin (0.9.13-1) unstable; urgency=low
+
+  * new upstream
+
+ -- Jan Wagner <waja@cyconet.org>  Thu, 21 Nov 2006 12:27:37 +0100
+
 php-suhosin (0.9.12-1) unstable; urgency=low
 
   * new upstream
