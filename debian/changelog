@@ -1,9 +1,9 @@
-php-suhosin (0.9.15-1) unstable; urgency=low
+php-suhosin (0.9.16-1) unstable; urgency=low
 
   * new upstream
   * removed re2c from builddeps
 
- -- Jan Wagner <waja@cyconet.org>  Wed, 29 Nov 2006 12:02:37 +0100
+ -- Jan Wagner <waja@cyconet.org>  Sun,  3 Dec 2006 21:57:28 +0100
 
 php-suhosin (0.9.12-1) unstable; urgency=low
 
