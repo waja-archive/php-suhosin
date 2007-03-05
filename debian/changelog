@@ -1,3 +1,10 @@
+php-suhosin (0.9.17-1) unstable; urgency=high
+
+  * new upstream (security release)
+       Fixed hard_memory_limit bypass due to casting bug in PHP
+
+ -- Jan Wagner <waja@cyconet.org>  Mon,  5 Mar 2007 13:27:16 +0100
+
 php-suhosin (0.9.16-1) unstable; urgency=low
 
   * new upstream
