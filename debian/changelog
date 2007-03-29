@@ -1,9 +1,12 @@
 php-suhosin (0.9.18-1) unstable; urgency=low
 
+  [ Jan Wagner ]
   * new upstream (Closes: #416444)
+
+  [ Alexander Wirt ]
   * Fix suhosin.ini comment (Closes: #416111)
 
- -- Jan Wagner <waja@cyconet.org>  Mon, 12 Mar 2007 21:47:32 +0100
+ -- Alexander Wirt <formorer@debian.org>  Thu, 29 Mar 2007 08:27:09 +0200
 
 php-suhosin (0.9.16-1) unstable; urgency=low
 
