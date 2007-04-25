@@ -1,7 +1,5 @@
 #!/usr/bin/make -f
-BUILD4=$(CURDIR)/debian/php4-suhosin
 BUILD5=$(CURDIR)/debian/php5-suhosin
-PHP_EX4=$(shell /usr/bin/php-config4 --extension-dir)
 PHP_EX5=$(shell /usr/bin/php-config5 --extension-dir)
 
 #export DH_VERBOSE=1
@@ -40,7 +38,7 @@ build-stamp-php5: build-stamp
 clean:
 	dh_testdir
 	dh_testroot
-	rm -rf build-stamp build-stamp-php5 
+	rm -rf build-stamp build-stamp-php5
 	-$(MAKE) clean
 	# to make pbuilder happy
 ifeq ($(shell which phpize),/usr/bin/phpize)
@@ -48,9 +46,9 @@ ifeq ($(shell which phpize),/usr/bin/phpize)
 endif
 	dh_clean
 
-install: build-php5 
+install: build-php5
 
-build-php5: DH_OPTIONS=-pphp5-suhosin
+build-php5:
 build-php5: build-stamp-php5
 	dh_testdir
 	dh_testroot
@@ -60,24 +58,24 @@ build-php5: build-stamp-php5
 
 binary-indep:
 
-binary-arch-php5: DH_OPTIONS='--package=php5-suhosin --no-package=php4-suhosin'
+binary-arch-php5:
 binary-arch-php5: build-php5
 	dh_testdir
 	dh_testroot
 	dh_installdirs
-	dh_installchangelogs Changelog 
-	dh_installdocs --package=php5-suhosin CREDITS
+	dh_installchangelogs Changelog
+	dh_installdocs CREDITS
 	dh_install
 	dh_link
 	dh_strip
 	dh_compress
 	dh_fixperms
-	dh_installdeb --package=php5-suhosin --no-package=php4-suhosin
+	dh_installdeb
 	dh_shlibdeps
 	echo "php:Depends=phpapi-`php-config5 --phpapi`" >> debian/php5-suhosin.substvars
-	dh_gencontrol --package=php5-suhosin --no-package=php4-suhosin
+	dh_gencontrol
 	dh_md5sums
-	dh_builddeb --package=php5-suhosin --no-package=php4-suhosin
+	dh_builddeb
 
 binary-arch: binary-arch-php5
 binary: binary-indep binary-arch
