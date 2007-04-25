@@ -3,24 +3,8 @@ Section: web
 Priority: optional
 Maintainer: php-suhosin maintainers <php-suhosin-maintainers@ned.snow-crash.org>
 Uploaders: Alexander Wirt <formorer@debian.org>, Jan Wagner <waja@cyconet.org>
-Build-Depends: debhelper (>= 5), php4-dev (>= 4:4.3.10), php5-dev (>= 5.2.0)
+Build-Depends: debhelper (>= 5), php5-dev (>= 5.2.0)
 Standards-Version: 3.7.2
-
-Package: php4-suhosin
-Architecture: any
-Depends: ${misc:Depends}, ${shlibs:Depends}, ${php:Depends}
-Description: advanced protection module for php4
- This package provides a module for suhosin functions.
- .
- Suhosin is an advanced protection system for PHP installations. It was
- designed to protect servers and users from known and unknown flaws in PHP
- applications and the PHP core. Suhosin comes in two independent parts, that
- can be used separately or in combination. The first part is a small patch
- against the PHP core, that implements a few low-level protections against
- bufferoverflows or format string vulnerabilities and the second part is a
- powerful PHP extension that implements all the other protections.
- .
-  Homepage: <http://www.hardened-php.net/suhosin/>
 
 Package: php5-suhosin
 Architecture: any

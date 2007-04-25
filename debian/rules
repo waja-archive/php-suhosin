@@ -28,15 +28,6 @@ build-stamp:
 	dh_testdir
 	touch build-stamp
 
-build-stamp-php4: build-stamp
-	-$(MAKE) clean
-	phpize --clean
-	phpize4
-	chmod a+x ./configure
-	./configure --prefix=$(BUILD4)/usr --with-php-config=/usr/bin/php-config4
-	$(MAKE) DESTDIR=$(BUILD4)
-	touch build-stamp-php4
-
 build-stamp-php5: build-stamp
 	-$(MAKE) clean
 	phpize --clean
@@ -49,7 +40,7 @@ build-stamp-php5: build-stamp
 clean:
 	dh_testdir
 	dh_testroot
-	rm -rf build-stamp build-stamp-php5 build-stamp-php4
+	rm -rf build-stamp build-stamp-php5 
 	-$(MAKE) clean
 	# to make pbuilder happy
 ifeq ($(shell which phpize),/usr/bin/phpize)
@@ -57,15 +48,7 @@ ifeq ($(shell which phpize),/usr/bin/phpize)
 endif
 	dh_clean
 
-install: build-php4 build-php5
-
-build-php4: DH_OPTIONS=-pphp4-suhosin
-build-php4: build-stamp-php4
-	dh_testdir
-	dh_testroot
-	dh_installdirs
-	install -D -m 644 modules/suhosin.so debian/php4-suhosin$(PHP_EX4)/suhosin.so
-	install -D -m 644 debian/suhosin.ini debian/php4-suhosin/etc/php4/conf.d/suhosin.ini
+install: build-php5 
 
 build-php5: DH_OPTIONS=-pphp5-suhosin
 build-php5: build-stamp-php5
@@ -76,26 +59,6 @@ build-php5: build-stamp-php5
 	install -D -m 644 debian/suhosin.ini debian/php5-suhosin/etc/php5/conf.d/suhosin.ini
 
 binary-indep:
-
-binary-arch-php4: DH_OPTIONS='--package=php4-suhosin --no-package=php5-suhosin'
-binary-arch-php4: build-php4
-	dh_testdir
-	dh_testroot
-	dh_installdirs
-	dh_installchangelogs Changelog
-	dh_installdebconf
-	dh_installdocs CREDITS 
-	dh_install
-	dh_link
-	dh_strip
-	dh_compress
-	dh_fixperms
-	dh_installdeb --package=php4-suhosin --no-package=php5-suhosin
-	dh_shlibdeps
-	echo "php:Depends=phpapi-`php-config4 --phpapi`" >> debian/php4-suhosin.substvars
-	dh_gencontrol --package=php4-suhosin --no-package=php5-suhosin
-	dh_md5sums
-	dh_builddeb --package=php4-suhosin --no-package=php5-suhosin
 
 binary-arch-php5: DH_OPTIONS='--package=php5-suhosin --no-package=php4-suhosin'
 binary-arch-php5: build-php5
@@ -116,6 +79,6 @@ binary-arch-php5: build-php5
 	dh_md5sums
 	dh_builddeb --package=php5-suhosin --no-package=php4-suhosin
 
-binary-arch: binary-arch-php4 binary-arch-php5
+binary-arch: binary-arch-php5
 binary: binary-indep binary-arch
-.PHONY: build-php4 build-php5 clean binary-indep binary-arch binary install
+.PHONY: build-php5 clean binary-indep binary-arch binary install
