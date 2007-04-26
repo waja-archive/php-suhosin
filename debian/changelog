@@ -1,6 +1,7 @@
 php-suhosin (0.9.18-2) unstable; urgency=low
 
   * remove php4-suhosin (closes #418321).
+  * ship suhosin.ini with the implizit default values
 
  -- Jan Wagner <waja@localhost>  Wed, 25 Apr 2007 20:20:18 +0200
 
