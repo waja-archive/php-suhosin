@@ -1,0 +1,2 @@
+version=3
+http://www.hardened-php.net/suhosin/download.html /suhosin/_media/suhosin-(.*)\.tgz
