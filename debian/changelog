@@ -1,3 +1,21 @@
+php-suhosin (0.9.22-1) unstable; urgency=low
+
+  * new upstream release (closes: #454382)
+    
+    -  Removed LFS warning message because it crashed on several systems
+    -  Fixed function_exists() now checks the Suhosin permissions
+    -  Fixed crypt() salt no longer uses Blowfish by default
+    -  Fixed .htaccess/perdir support
+    -  Fixed compilation problem on OS/X
+    -  Added protection against some attacks through _SERVER variables
+    -  Added suhosin.server.strip and suhosin.server.encode
+    -  Added error message that warns about the LFS binary incompatibility
+
+  * added Vcs- fields, moved Homepage into source header's field
+  * add watch file
+
+ -- Jan Wagner <waja@cyconet.org>  Wed, 05 Dec 2007 09:15:22 +0100
+
 php-suhosin (0.9.20-1) unstable; urgency=low
 
   * new upstream
