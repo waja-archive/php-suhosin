@@ -17,9 +17,10 @@ php-suhosin (0.9.22-1) unstable; urgency=low
 
   [ Alexander Wirt ]
   * Bump standards version
-  * Don't ignore errors from make clean 
+  * Don't ignore errors from make clean
+  * Update copyright file 
 
- -- Alexander Wirt <formorer@debian.org>  Thu, 06 Dec 2007 10:41:21 +0100
+ -- Alexander Wirt <formorer@debian.org>  Thu, 06 Dec 2007 10:53:43 +0100
 
 php-suhosin (0.9.20-1) unstable; urgency=low
 
