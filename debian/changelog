@@ -16,9 +16,10 @@ php-suhosin (0.9.22-1) unstable; urgency=low
   * add watch file
 
   [ Alexander Wirt ]
-  * Bump standards version  
+  * Bump standards version
+  * Don't ignore errors from make clean 
 
- -- Alexander Wirt <formorer@debian.org>  Thu, 06 Dec 2007 10:39:34 +0100
+ -- Alexander Wirt <formorer@debian.org>  Thu, 06 Dec 2007 10:41:21 +0100
 
 php-suhosin (0.9.20-1) unstable; urgency=low
 

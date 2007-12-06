@@ -27,7 +27,7 @@ build-stamp:
 	touch build-stamp
 
 build-stamp-php5: build-stamp
-	-$(MAKE) clean
+	[ ! -f Makefile ] || $(MAKE) clean
 	phpize --clean
 	phpize5
 	chmod a+x ./configure
@@ -39,7 +39,7 @@ clean:
 	dh_testdir
 	dh_testroot
 	rm -rf build-stamp build-stamp-php5
-	-$(MAKE) clean
+	[ ! -f Makefile ] || $(MAKE) distclean
 	# to make pbuilder happy
 ifeq ($(shell which phpize),/usr/bin/phpize)
 	phpize --clean
