@@ -1,8 +1,9 @@
-php-suhosin (0.9.22-2) unstable; urgency=low
+php-suhosin (0.9.23-1) unstable; urgency=low
 
+  * new upstream release
   * fix watch file, since URL changed recently (closes: #459994).
 
- -- Jan Wagner <waja@cyconet.org>  Thu, 10 Jan 2008 03:55:47 +0100
+ -- Jan Wagner <waja@cyconet.org>  Thu, 17 Jan 2008 16:19:36 +0100
 
 php-suhosin (0.9.22-1) unstable; urgency=low
 
