@@ -62,7 +62,7 @@ Licenses:
 		Takahiro Tanimoto <matz@netlab.co.jp>
 	License: GNU General Public License
 
-	This file is part of the GNU C Library.  Its master source is NOT part 
+	This file is part of the GNU C Library.  Its master source is NOT part
 	of the C library, however.  The master source lives in /gd/gnu/lib.
 
 	The GNU C Library is free software; you can redistribute it and/or
@@ -95,27 +95,27 @@ Licenses:
 	--------------------------------------------------------------------
 
 	Redistribution and use in source and binary forms, with or without
-	modification, is permitted provided that the following conditions are 
+	modification, is permitted provided that the following conditions are
 	met:
 
 	  1. Redistributions of source code must retain the above copyright
 	     notice, this list of conditions and the following disclaimer.
- 
+
 	  2. Redistributions in binary form must reproduce the above copyright
 	     notice, this list of conditions and the following disclaimer in
 	     the documentation and/or other materials provided with the
 	     distribution.
- 
+
 	  3. The name "PHP" must not be used to endorse or promote products
 	     derived from this software without prior written permission. For
 	     written permission, please contact group@php.net.
-  
+
 	  4. Products derived from this software may not be called "PHP", nor
 	     may "PHP" appear in their name, without prior written permission
 	     from group@php.net.  You may indicate that your software works in
 	     conjunction with PHP by saying "Foo for PHP" instead of calling it
 	     "PHP Foo" or "phpfoo"
- 
+
 	  5. The PHP Group may publish revised and/or new versions of the
 	     license from time to time. Each version will be given a
 	     distinguishing version number.
@@ -132,6 +132,6 @@ Licenses:
 	     "This product includes PHP software, freely available from
 	     <http://www.php.net/software/>".
 
-The Debian packaging is (C) 2006, 2007 Jan Wagner <waja@cyconet.org>,
+The Debian packaging is (C) 2006, 2008 Jan Wagner <waja@cyconet.org>,
 Alexander Wirt <formorer@debian.org> and is licensed under the GPL, see
 `/usr/share/common-licenses/GPL'.
