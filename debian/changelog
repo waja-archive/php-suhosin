@@ -1,9 +1,10 @@
-php-suhosin (0.9.23-2) UNRELEASED; urgency=low
+php-suhosin (0.9.24-1) UNRELEASED; urgency=low
 
+  * new upstream release
   * bump copyright of packaging to 2008 and remove trailing whitespaces
   * Updating standards version to 3.8.0, no changes needed
 
- -- Jan Wagner <waja@cyconet.org>  Mon, 14 Apr 2008 20:59:26 +0200
+ -- Jan Wagner <waja@cyconet.org>  Tue, 17 Jun 2008 11:06:54 +0200
 
 php-suhosin (0.9.23-1) unstable; urgency=low
 
