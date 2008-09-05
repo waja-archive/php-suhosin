@@ -1,3 +1,10 @@
+php-suhosin (0.9.27-1) UNRELEASED; urgency=low
+
+  * new upstream release
+  * NOT RELEASED YET
+
+ -- Jan Wagner <waja@cyconet.org>  Wed, 18 Jun 2008 15:16:33 +0200
+
 php-suhosin (0.9.24-1) unstable; urgency=low
 
   * new upstream release
@@ -33,7 +40,7 @@ php-suhosin (0.9.22-1) unstable; urgency=low
   [ Alexander Wirt ]
   * Bump standards version
   * Don't ignore errors from make clean
-  * Update copyright file 
+  * Update copyright file
 
  -- Alexander Wirt <formorer@debian.org>  Thu, 06 Dec 2007 10:53:43 +0100
 
@@ -65,7 +72,7 @@ php-suhosin (0.9.16-1) unstable; urgency=low
 php-suhosin (0.9.12-1) unstable; urgency=low
 
   * new upstream
-  * fixed address of "Free Software Foundation, Inc." in changelog 
+  * fixed address of "Free Software Foundation, Inc." in changelog
 
  -- Jan Wagner <waja@cyconet.org>  Sun, 17 Nov 2006 15:41:36 +0100
 
@@ -75,7 +82,7 @@ php-suhosin (0.9.11-2) unstable; urgency=low
   * drop debian/po
 
   [ Alexander Wirt ]
-  * Update debian/copyright 
+  * Update debian/copyright
 
  -- Alexander Wirt <formorer@debian.org>  Sun, 12 Nov 2006 20:09:02 +0100
 
