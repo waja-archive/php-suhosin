@@ -51,6 +51,25 @@ Licenses:
 	Copyright (C) 1991 Jochen Obalek <jochen.obalek@bigfoot.de>
 	License: PHP license 3.01
 
+	File execute.c
+	Copyright (c) 2006-2007 The Hardened-PHP Project
+	Copyright (c) 2007 SektionEins GmbH
+	Copyright (C) 1997 - 2002, Makoto Matsumoto and Takuji Nishimura,
+	Copyright (C) 2000 - 2003, Richard J. Wagner
+	License: PHP license 3.01
+
+	The file contains the following clause were the code is taken out of
+	ext/standard/rand.c from PHP Source with a statement that isn't
+	compatible with the DFSG:
+	  "The code as Shawn received it included the following notice:
+
+	     Copyright (C) 1997 Makoto Matsumoto and Takuji Nishimura.  When
+	     you use this, send an e-mail to <matumoto@math.keio.ac.jp> with
+	     an appropriate reference to your work."
+
+	However, this requirement has been rescinded by the copyright holder in
+	message <48E334A2.6050301@math.sci.hiroshima-u.ac.jp> to bug #498621.
+
 	File rfc1867.c
 	Copyright (c) 1997-2006 The PHP Group
 		Rasmus Lerdorf <rasmus@php.net>
