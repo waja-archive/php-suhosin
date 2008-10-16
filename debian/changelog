@@ -1,4 +1,4 @@
-php-suhosin (0.9.27-1) UNRELEASED; urgency=low
+php-suhosin (0.9.27-1) unstable; urgency=low
 
   * new upstream release (closes: #497871)
   * declare license situation of execute.c in copyright file
