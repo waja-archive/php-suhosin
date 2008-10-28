@@ -1,6 +1,7 @@
 php-suhosin (0.9.27-2) UNRELEASED; urgency=low
 
-  * NOT RELEASED YET
+  * add suhosin.srand.ignore and suhosin.mt_srand.ignore with their default
+    settings to suhosin.ini
 
  -- Jan Wagner <waja@cyconet.org>  Thu, 16 Oct 2008 16:25:04 +0200
 
