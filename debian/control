@@ -1,5 +1,5 @@
 Source: php-suhosin
-Section: web
+Section: php
 Priority: optional
 Maintainer: php-suhosin maintainers <php-suhosin-maintainers@ned.snow-crash.org>
 Uploaders: Alexander Wirt <formorer@debian.org>, Jan Wagner <waja@cyconet.org>
