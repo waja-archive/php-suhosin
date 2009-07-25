@@ -5,6 +5,7 @@ php-suhosin (0.9.27-2) UNRELEASED; urgency=low
   * change Section to 'php'
   * bump standards version to 3.8.2 (no changes needed)
   * add link to documentation into suhosin.ini
+  * add "Copyright" to packaging copyright to make lintian happy
 
  -- Jan Wagner <waja@cyconet.org>  Thu, 16 Oct 2008 16:25:04 +0200
 

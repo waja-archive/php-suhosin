@@ -151,6 +151,6 @@ Licenses:
 	     "This product includes PHP software, freely available from
 	     <http://www.php.net/software/>".
 
-The Debian packaging is (C) 2006, 2008 Jan Wagner <waja@cyconet.org>,
+The Debian packaging is Copyright (C) 2006, 2008 Jan Wagner <waja@cyconet.org>,
 Alexander Wirt <formorer@debian.org> and is licensed under the GPL, see
 `/usr/share/common-licenses/GPL'.
