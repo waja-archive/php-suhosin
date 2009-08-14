@@ -1,6 +1,9 @@
 php-suhosin (0.9.28-1) UNRELEASED; urgency=low
 
   * New upstream version
+    - Fixed crash bug with PHP 5.2.10 caused by a 
+      change in extension load order of ext/session
+      (Closes: #538820)
 
  -- Alexander Wirt <formorer@debian.org>  Fri, 14 Aug 2009 07:52:52 +0200
 
