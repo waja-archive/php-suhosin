@@ -1,10 +1,10 @@
-php-suhosin (0.9.29-1) UNRELEASED; urgency=low
+php-suhosin (0.9.29-1) unstable; urgency=low
 
   * New upstream version
   * update our suhosin.ini
   * bump standards version to 3.8.3 (no changes needed)
 
- -- Jan Wagner <waja@cyconet.org>  Sun, 20 Sep 2009 22:55:05 +0200
+ -- Jan Wagner <waja@cyconet.org>  Sun, 20 Sep 2009 23:08:24 +0200
 
 php-suhosin (0.9.28-1) unstable; urgency=low
 
