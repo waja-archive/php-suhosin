@@ -4,7 +4,6 @@ php-suhosin (0.9.29-2) UNRELEASED; urgency=low
   * Bump Standards-Version to 3.8.4, no changes needed
   * Migrate Vcs-Fields over to scm.uncompleted.org
   * Add 1.0 to debian/source/format
-  * Add trailing trunk/ at Vcs-Svn-field
 
  -- Jan Wagner <waja@cyconet.org>  Sun, 20 Sep 2009 23:16:05 +0200
 
