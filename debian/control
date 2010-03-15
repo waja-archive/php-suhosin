@@ -11,7 +11,7 @@ Standards-Version: 3.8.4
 
 Package: php5-suhosin
 Architecture: any
-Depends: ${shlibs:Depends}, ${php:Depends}
+Depends: ${shlibs:Depends}, ${php:Depends}, ${misc:Depends}
 Description: advanced protection module for php5
  This package provides a module for suhosin functions.
  .
