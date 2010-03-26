@@ -1,3 +1,23 @@
+php-suhosin (0.9.30-1) UNRELEASED; urgency=low
+
+  * New upstream version
+    - Added line ending characters %0a and %0d to the list of dangerous
+      characters handled by suhosin.server.encode and suhosin.server.strip
+    - Fixed crash bug with PHP 5.3.x and session module (due to changed session
+      globals struct)
+    - Added ! protection to PHP session serializer
+    - Fixed simulation mode now also affects (dis)allowed functions
+    - Fixed missing return (1); in random number generator replacements
+    - Fixed random number generator replacement error case behaviour in PHP
+      5.3.x
+    - Fixed error case handling in function_exists() PHP 5.3.x
+    - Merged changes/fixes in import_request_variables()/extract() from upstream
+      PHP
+    - Fixed suhosin_header_handler to be PHP 5.3.x compatible
+    - Merge fixes and new features of PHP's file upload code to suhosin
+
+ -- Jan Wagner <waja@cyconet.org>  Mon, 15 Mar 2010 22:00:03 +0100
+
 php-suhosin (0.9.29-2) unstable; urgency=low
 
   * Update address of the Maintainers List
