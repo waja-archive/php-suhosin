@@ -65,6 +65,7 @@ binary-arch-php5: build-php5
 	dh_installdirs
 	dh_installchangelogs Changelog
 	dh_installdocs CREDITS
+	dh_installexamples
 	dh_install
 	dh_link
 	dh_strip
