@@ -16,6 +16,7 @@ php-suhosin (0.9.30-1) UNRELEASED; urgency=low
     - Fixed suhosin_header_handler to be PHP 5.3.x compatible
     - Merge fixes and new features of PHP's file upload code to suhosin
   * Install upstream suhosin.ini into /usr/share/doc/php5-suhosin/examples/
+  * Add dpatch build-infrastructure
 
  -- Jan Wagner <waja@cyconet.org>  Mon, 15 Mar 2010 22:00:03 +0100
 

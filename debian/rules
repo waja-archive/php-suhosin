@@ -4,6 +4,8 @@ PHP_EX5=$(shell /usr/bin/php-config5 --extension-dir)
 
 #export DH_VERBOSE=1
 
+include /usr/share/dpatch/dpatch.make
+
 DEB_HOST_GNU_TYPE    ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
 
 CFLAGS += -O2 -Wall -fno-strict-aliasing
@@ -19,7 +21,7 @@ else
 	CFLAGS += -gstabs
 endif
 
-build:
+build: patch-stamp
 	@echo "Not use this."
 
 build-stamp:
@@ -35,7 +37,7 @@ build-stamp-php5: build-stamp
 	$(MAKE) DESTDIR=$(BUILD5)
 	touch build-stamp-php5
 
-clean:
+clean: unpatch
 	dh_testdir
 	dh_testroot
 	rm -rf build-stamp build-stamp-php5
