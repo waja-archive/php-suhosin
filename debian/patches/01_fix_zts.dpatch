@@ -1,0 +1,32 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## 01_fix_zts.dpatch
+## From: Stefan <stefan.esser@sektioneins.de>
+## Date: Fri Mar 26 10:10:08 2010 +0100
+## Subject: [PATCH] Fix ZTS build
+##
+## DP: Fix ZTS build
+
+@DPATCH@
+
+diff --git a/session.c b/session.c
+index 64b4822..6b26b11 100644
+--- a/session.c
++++ b/session.c
+@@ -346,7 +346,7 @@ int suhosin_session_encode(char **newstr, int *newlen TSRMLS_DC)
+ 	return SUCCESS;
+ }
+ 
+-static void suhosin_send_cookie()
++static void suhosin_send_cookie(TSRMLS_D)
+ {
+         int  * session_send_cookie = &SESSION_G(send_cookie);
+         char * base;
+@@ -641,7 +641,7 @@ static int suhosin_hook_s_read(void **mod_data, const char *key, char **val, int
+ regenerate:
+ 		SDEBUG("regenerating key is %s", key);
+ 		KEY = SESSION_G(id) = SESSION_G(mod)->s_create_sid(&SESSION_G(mod_data), NULL TSRMLS_CC);
+-		suhosin_send_cookie();
++		suhosin_send_cookie(TSRMLS_C);
+ 	} else if (strlen(key) > SUHOSIN_G(session_max_id_length)) {
+ 		suhosin_log(S_SESSION, "session id ('%s') exceeds maximum length - regenerating", KEY);
+ 		if (!SUHOSIN_G(simulation)) {
