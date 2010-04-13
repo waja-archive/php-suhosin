@@ -19,7 +19,8 @@ php-suhosin (0.9.31-1) UNRELEASED; urgency=low
     - Increased session identifier entropy by using /dev/urandom if available
   * Install upstream suhosin.ini into /usr/share/doc/php5-suhosin/examples/
   * Add dpatch build-infrastructure
-  * Add 10_fix_entropy.dpatch, to fix entropy (Closes: #539307)
+  * Add 10_fix_function_prototype.dpatch, to fix function prototype
+    (Closes: #539307)
 
  -- Jan Wagner <waja@cyconet.org>  Mon, 15 Mar 2010 22:00:03 +0100
 
