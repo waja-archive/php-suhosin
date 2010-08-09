@@ -1,6 +1,6 @@
 php-suhosin (0.9.32.1-1) UNRELEASED; urgency=low
 
-  * New upstream version
+  * New upstream version (Closes: #584509)
     - Improved random number seed generation more by adding /dev/urandom juice
     - Fixed missing header file resulting in wrong php_combined_lcg() prototype
       being used
