@@ -1,6 +1,13 @@
-php-suhosin (0.9.31-2) UNRELEASED; urgency=low
+php-suhosin (0.9.32.1-1) UNRELEASED; urgency=low
 
-  * NOT RELEASED YET
+  * New upstream version
+    - Improved random number seed generation more by adding /dev/urandom juice
+    - Fixed missing header file resulting in wrong php_combined_lcg() prototype
+      being used
+    - Added support for memory_limit > 2GB
+    - Fixed missing header file resulting in compile errors
+  * Drop 10_fix_function_prototype, integrated upstream
+  * Update watch file
 
  -- Jan Wagner <waja@cyconet.org>  Tue, 13 Apr 2010 13:51:22 +0200
 
