@@ -8,8 +8,9 @@ php-suhosin (0.9.32.1-1) unstable; urgency=low
     - Fixed missing header file resulting in compile errors
   * Drop 10_fix_function_prototype, integrated upstream
   * Update watch file
+  * Bump standards version to 3.9.1, no changes needed
 
- -- Jan Wagner <waja@cyconet.org>  Thu, 19 Aug 2010 10:00:43 +0200
+ -- Jan Wagner <waja@cyconet.org>  Thu, 19 Aug 2010 10:02:52 +0200
 
 php-suhosin (0.9.31-1) unstable; urgency=low
 
