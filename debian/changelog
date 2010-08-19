@@ -1,4 +1,4 @@
-php-suhosin (0.9.32.1-1) UNRELEASED; urgency=low
+php-suhosin (0.9.32.1-1) unstable; urgency=low
 
   * New upstream version (Closes: #584509)
     - Improved random number seed generation more by adding /dev/urandom juice
@@ -9,7 +9,7 @@ php-suhosin (0.9.32.1-1) UNRELEASED; urgency=low
   * Drop 10_fix_function_prototype, integrated upstream
   * Update watch file
 
- -- Jan Wagner <waja@cyconet.org>  Tue, 13 Apr 2010 13:51:22 +0200
+ -- Jan Wagner <waja@cyconet.org>  Thu, 19 Aug 2010 10:00:43 +0200
 
 php-suhosin (0.9.31-1) unstable; urgency=low
 
