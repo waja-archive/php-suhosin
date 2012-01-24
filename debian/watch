@@ -1,2 +1,3 @@
 version=3
 http://www.hardened-php.net/suhosin/download.html http://download.suhosin.org/suhosin-(.*)\.tar.gz
+http://www.hardened-php.net/suhosin/download.html http://download.suhosin.org/suhosin-(.*)\.tgz

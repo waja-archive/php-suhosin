@@ -6,6 +6,7 @@ php-suhosin (0.9.33-1) UNRELEASED; urgency=low
       extension anymore
     - Fixed that disabling HTTP response splitting protection also disabled
       NUL byte protection in HTTP headers
+  * Update watch, upstream changed naming scheme
 
  -- Jan Wagner <waja@cyconet.org>  Thu, 19 Aug 2010 11:37:16 +0200
 
