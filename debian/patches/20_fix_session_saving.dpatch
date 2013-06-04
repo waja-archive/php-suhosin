@@ -1,0 +1,65 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## 20_fix_session_saving.dpatch by Jan Wagner <waja@cyconet.org>
+##
+## From 117b6aa6efec61afaa1431c698dad8eb553b55f5 Mon Sep 17 00:00:00 2001
+## From: Olivier Blin <dev@blino.org>
+## Date: Sun, 31 Mar 2013 01:15:48 +0100
+## Subject: [PATCH] Fix saving sessions in PHP 5.4 with user session handlers (fix #12)
+##
+## When session storage functions are set with session_set_save_handler()
+## (this is the "mod_user" mode), mod_data will be NULL in PHP 5.4, and
+## suhosin session hooks will bail out.
+## PHP 5.4 allows to check this with mod_user_implemented instead.
+---
+ session.c | 21 ++++++++++++++++++---
+ 1 file changed, 18 insertions(+), 3 deletions(-)
+
+diff --git a/session.c b/session.c
+index 1045a93..513c195 100644
+--- a/session.c
++++ b/session.c
+@@ -728,7 +728,12 @@ static int suhosin_hook_s_read(void **mod_data, const char *key, char **val, int
+     }*/
+     
+     /* protect dumb session handlers */
+-    if (key == NULL || !key[0] || *mod_data == NULL) {
++    if (key == NULL || !key[0] ||
++		(*mod_data == NULL
++#if PHP_VERSION_ID >= 50400
++		 && !SESSION_G(mod_user_implemented)
++#endif
++		)) {
+ regenerate:
+         SDEBUG("regenerating key is %s", key);
+         KEY = SESSION_G(id) = SESSION_G(mod)->s_create_sid(&SESSION_G(mod_data), NULL TSRMLS_CC);
+@@ -777,7 +782,12 @@ static int suhosin_hook_s_write(void **mod_data, const char *key, const char *va
+     char *v = (char *)val;
+ 
+     /* protect dumb session handlers */
+-    if (key == NULL || !key[0] || val == NULL || strlen(key) > SUHOSIN_G(session_max_id_length) || *mod_data == NULL) {
++    if (key == NULL || !key[0] || val == NULL || strlen(key) > SUHOSIN_G(session_max_id_length) ||
++		(*mod_data == NULL
++#if PHP_VERSION_ID >= 50400
++		 && !SESSION_G(mod_user_implemented)
++#endif
++		)) {
+         r = FAILURE;
+         goto return_write;
+     }
+@@ -820,7 +830,12 @@ static int suhosin_hook_s_destroy(void **mod_data, const char *key TSRMLS_DC)
+     int r;
+ 
+     /* protect dumb session handlers */
+-    if (key == NULL || !key[0] || strlen(key) > SUHOSIN_G(session_max_id_length) || *mod_data == NULL) {
++    if (key == NULL || !key[0] || strlen(key) > SUHOSIN_G(session_max_id_length) ||
++		(*mod_data == NULL
++#if PHP_VERSION_ID >= 50400
++		 && !SESSION_G(mod_user_implemented)
++#endif
++		)) {
+         return FAILURE;
+     }
+     
+-- 
+1.8.1.6
+
