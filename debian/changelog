@@ -2,12 +2,12 @@ php-suhosin (0.9.33-4) UNRELEASED; urgency=low
 
   * Update to recent development version
     - Add 10_suhosin_0.9.34.dpatch
-    (Closes: #656486, #663954, #667865, #669972, #674713)
+    (Closes: #656486, #663954, #667865, #669972, #674713, #666911)
   * Fix session saving
     - Add 20_fix_session_saving.dpatch
-  * Removed HAVE_MB_STRING code
+  * Removed HAVE_MB_STRING code (Closes: #702522)
     - Add 21_remove_HAVE_MB_STRING.dpatch
-  * Install suhosin.ini to /etc/php5/mods-available (closes: #674190)
+  * Install suhosin.ini to /etc/php5/mods-available (Closes: #674190)
   * Migrate suhosin.ini to /etc/php5/mods-available (Closes: #675278)
     - Add php5-suhosin.preinst
 
