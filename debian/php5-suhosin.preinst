@@ -4,11 +4,10 @@ set -e
 
 #DEBHELPER#
 
-if [ "$2" ] && dpkg --compare-versions "$2" lt "0.9.33-4~"; then
-  [ -f /etc/php5/conf.d/suhosin.ini ] && \
-    [ -d /etc/php5/mods-available/ ] && \
-      [ ! -f /etc/php5/mods-available/suhosin.ini ] && \
-    mv /etc/php5/conf.d/suhosin.ini /etc/php5/mods-available/suhosin.ini
-fi
+for dsoname in suhosin ; do
+    inifile=${dsoname}.ini
 
-exit
+    dpkg-maintscript-helper mv_conffile /etc/php5/conf.d/${inifile} /etc/php5/mods-available/${inifile} 0.9.33-2~ -- "$@";
+done
+
+exit 0
