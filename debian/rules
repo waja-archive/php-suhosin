@@ -21,8 +21,10 @@ else
 	CFLAGS += -gstabs
 endif
 
-build: patch-stamp
+build: build-arch build-indep
 	@echo "Not use this."
+build-arch: patch-stamp build-stamp-php5
+build-indep: patch-stamp build-stamp-php5
 
 build-stamp:
 	dh_testdir
