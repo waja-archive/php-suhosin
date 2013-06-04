@@ -7,7 +7,7 @@ Build-Depends: debhelper (>= 5), php5-dev (>= 5.2.0), dpatch
 Homepage: http://www.hardened-php.net/suhosin/
 Vcs-Browser: https://scm.uncompleted.org/projects/debian/repository/show/php-suhosin
 Vcs-Svn: https://scm.uncompleted.org/svn/debian/php-suhosin/trunk
-Standards-Version: 3.9.1
+Standards-Version: 3.9.4
 
 Package: php5-suhosin
 Architecture: any

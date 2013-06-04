@@ -11,6 +11,7 @@ php-suhosin (0.9.33-4) UNRELEASED; urgency=low
   * Migrate suhosin.ini to /etc/php5/mods-available (Closes: #675278)
     - Add php5-suhosin.preinst
   * Add build-arch and build-indep targets to debian/rules
+  * Bump standards version to 3.9.4, no additional changes needed
 
  -- Jan Wagner <waja@cyconet.org>  Tue, 24 Jan 2012 23:13:08 +0100
 
