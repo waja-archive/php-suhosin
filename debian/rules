@@ -56,7 +56,7 @@ build-php5: build-stamp-php5
 	dh_testroot
 	dh_installdirs
 	install -D -m 644 modules/suhosin.so debian/php5-suhosin$(PHP_EX5)/suhosin.so
-	install -D -m 644 debian/suhosin.ini debian/php5-suhosin/etc/php5/conf.d/suhosin.ini
+	install -D -m 644 debian/suhosin.ini debian/php5-suhosin/etc/php5/mods-available/suhosin.ini
 
 binary-indep:
 
