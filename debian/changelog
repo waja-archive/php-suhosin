@@ -2,7 +2,7 @@ php-suhosin (0.9.33-4) UNRELEASED; urgency=low
 
   * Update to recent development version
     - Add 10_suhosin_0.9.34.dpatch
-    (Closes: #656486, #663954, #667865, #669972)
+    (Closes: #656486, #663954, #667865, #669972, #674713)
   * Fix session saving
     - Add 20_fix_session_saving.dpatch
   * Removed HAVE_MB_STRING code
