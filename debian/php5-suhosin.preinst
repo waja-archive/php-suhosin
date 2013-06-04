@@ -1,0 +1,14 @@
+#!/bin/sh
+
+set -e
+
+#DEBHELPER#
+
+if [ "$2" ] && dpkg --compare-versions "$2" lt "0.9.33-4~"; then
+  [ -f /etc/php5/conf.d/suhosin.ini ] && \
+    [ -d /etc/php5/mods-available/ ] && \
+      [ ! -f /etc/php5/mods-available/suhosin.ini ] && \
+    mv /etc/php5/conf.d/suhosin.ini /etc/php5/mods-available/suhosin.ini
+fi
+
+exit

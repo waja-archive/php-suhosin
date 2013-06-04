@@ -8,6 +8,8 @@ php-suhosin (0.9.33-4) UNRELEASED; urgency=low
   * Removed HAVE_MB_STRING code
     - Add 21_remove_HAVE_MB_STRING.dpatch
   * Install suhosin.ini to /etc/php5/mods-available (closes: #674190)
+  * Migrate suhosin.ini to /etc/php5/mods-available (Closes: #675278)
+    - Add php5-suhosin.preinst
 
  -- Jan Wagner <waja@cyconet.org>  Tue, 24 Jan 2012 23:13:08 +0100
 
