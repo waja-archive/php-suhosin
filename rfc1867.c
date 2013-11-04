@@ -742,7 +742,7 @@ static int multipart_buffer_read(multipart_buffer *self, char *buf, int bytes, i
   XXX: this is horrible memory-usage-wise, but we only expect
   to do this on small pieces of form data.
 */
-static char *multipart_buffer_read_body(multipart_buffer *self, unsigned int *len TSRMLS_DC)
+static char *multipart_buffer_read_body(multipart_buffer *self TSRMLS_DC)
 {
 	char buf[FILLUNIT], *out=NULL;
 	int total_bytes=0, read_bytes=0;
@@ -754,7 +754,6 @@ static char *multipart_buffer_read_body(multipart_buffer *self, unsigned int *le
 	}
 
 	if (out) out[total_bytes] = '\0';
-	*len = total_bytes;
 
 	return out;
 }
@@ -905,8 +904,7 @@ SAPI_POST_HANDLER_FUNC(suhosin_rfc1867_post_handler)
 			/* Normal form variable, safe to read all data into memory */
 			if (!filename && param) {
 
-                unsigned int value_len;
-				char *value = multipart_buffer_read_body(mbuff, &value_len TSRMLS_CC);
+				char *value = multipart_buffer_read_body(mbuff TSRMLS_CC);
 				unsigned int new_val_len; /* Dummy variable */
 
 				if (!value) {
@@ -950,16 +948,7 @@ SDEBUG("calling inputfilter");
 					safe_php_register_variable(param, value, array_ptr, 0 TSRMLS_CC);
 #endif
 #ifdef ZEND_ENGINE_2
-				} else {
-					multipart_event_formdata event_formdata;
-
-					event_formdata.post_bytes_processed = SG(read_post_bytes);
-					event_formdata.name = param;
-					event_formdata.value = &value;
-					event_formdata.length = value_len;
-					event_formdata.newlength = NULL;
-                    suhosin_rfc1867_filter(MULTIPART_EVENT_FORMDATA, &event_formdata, &event_extra_data TSRMLS_CC);			    
-                }
+				}
 #endif				
 				if (!strcasecmp(param, "MAX_FILE_SIZE")) {
 					max_file_size = atol(value);

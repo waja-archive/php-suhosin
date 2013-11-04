@@ -38,45 +38,40 @@ SAPI_POST_HANDLER_FUNC(suhosin_rfc1867_post_handler);
 
 SAPI_POST_HANDLER_FUNC(suhosin_std_post_handler)
 {
-    char *var, *val, *e, *s, *p;
-    zval *array_ptr = (zval *) arg;
+	char *var, *val;
+	char *strtok_buf = NULL;
+	zval *array_ptr = (zval *) arg;
 
-    if (SG(request_info).post_data==NULL) {
-        return;
-    }	
+	if (SG(request_info).post_data == NULL) {
+		return;
+	}	
 
-    s = SG(request_info).post_data;
-    e = s + SG(request_info).post_data_length;
+	var = php_strtok_r(SG(request_info).post_data, "&", &strtok_buf);
 
-    while (s < e && (p = memchr(s, '&', (e - s)))) {
-last_value:
-        if ((val = memchr(s, '=', (p - s)))) { /* have a value */
-            unsigned int val_len, new_val_len;
-            var = s;
+	while (var) {
+		val = strchr(var, '=');
+		if (val) { /* have a value */
+			unsigned int val_len, new_val_len;
 
-            php_url_decode(var, (val - s));
-            val++;
-            val_len = php_url_decode(val, (p - val));
-            val = estrndup(val, val_len);
-            if (suhosin_input_filter(PARSE_POST, var, &val, val_len, &new_val_len TSRMLS_CC)) {
+			*val++ = '\0';
+			php_url_decode(var, strlen(var));
+			val_len = php_url_decode(val, strlen(val));
+			val = estrndup(val, val_len);
+			if (suhosin_input_filter(PARSE_POST, var, &val, val_len, &new_val_len TSRMLS_CC)) {
 #ifdef ZEND_ENGINE_2
-                if (sapi_module.input_filter(PARSE_POST, var, &val, new_val_len, &new_val_len TSRMLS_CC)) {
+				if (sapi_module.input_filter(PARSE_POST, var, &val, new_val_len, &new_val_len TSRMLS_CC)) {
 #endif
-                    php_register_variable_safe(var, val, new_val_len, array_ptr TSRMLS_CC);
+					php_register_variable_safe(var, val, new_val_len, array_ptr TSRMLS_CC);
 #ifdef ZEND_ENGINE_2
-                }
+				}
 #endif
-            } else {
-                SUHOSIN_G(abort_request)=1;
-            }
-            efree(val);
-        }
-        s = p + 1;
-    }
-    if (s < e) {
-        p = e;
-        goto last_value;
-    }
+			} else {
+				SUHOSIN_G(abort_request)=1;
+			}
+			efree(val);
+		}
+		var = php_strtok_r(NULL, "&", &strtok_buf);
+	}
 }
 
 /* {{{ php_post_entries[]
