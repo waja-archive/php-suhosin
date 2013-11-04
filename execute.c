@@ -1148,29 +1148,13 @@ internal_function_handler ihandlers[] = {
 static void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int return_value_used TSRMLS_DC)
 {
 	char *lcname;
-	int function_name_strlen, free_lcname = 0;
+	int function_name_strlen;
 	zval *return_value;
-	zend_class_entry *ce;
 	int ht;
 	internal_function_handler *ih;
 	
-	ce = ((zend_internal_function *) execute_data_ptr->function_state.function)->scope;
 	lcname = ((zend_internal_function *) execute_data_ptr->function_state.function)->function_name;
 	function_name_strlen = strlen(lcname);
-	
-	/* handle methodcalls correctly */
-	if (ce != NULL) {
-		char *tmp = (char *) emalloc(function_name_strlen + 2 + ce->name_length + 1);
-		memcpy(tmp, ce->name, ce->name_length);
-		memcpy(tmp+ce->name_length, "::", 2);
-		memcpy(tmp+ce->name_length+2, lcname, function_name_strlen);
-		lcname = tmp;
-		free_lcname = 1;
-		function_name_strlen += ce->name_length + 2;
-		lcname[function_name_strlen] = 0;
-		zend_str_tolower(lcname, function_name_strlen);
-	}
-	
 #ifdef ZEND_ENGINE_2  
 	return_value = (*(temp_variable *)((char *) execute_data_ptr->Ts + execute_data_ptr->opline->result.u.var)).var.ptr;
 #else
@@ -1184,26 +1168,30 @@ static void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int re
 	
 		if (SUHOSIN_G(eval_whitelist) != NULL) {
 			if (!zend_hash_exists(SUHOSIN_G(eval_whitelist), lcname, function_name_strlen+1)) {
-				suhosin_log(S_EXECUTOR, "function outside of eval whitelist called: %s()", lcname);
-				goto execute_internal_bailout;
+			    suhosin_log(S_EXECUTOR, "function outside of eval whitelist called: %s()", lcname);
+			    FUNCTION_WARNING()
+			    suhosin_bailout(TSRMLS_C);
 			}
 		} else if (SUHOSIN_G(eval_blacklist) != NULL) {
 			if (zend_hash_exists(SUHOSIN_G(eval_blacklist), lcname, function_name_strlen+1)) {
-				suhosin_log(S_EXECUTOR, "function within eval blacklist called: %s()", lcname);
-				goto execute_internal_bailout;
+			    suhosin_log(S_EXECUTOR, "function within eval blacklist called: %s()", lcname);
+			    FUNCTION_WARNING()
+			    suhosin_bailout(TSRMLS_C);
 			}
 		}
 	}
 	
 	if (SUHOSIN_G(func_whitelist) != NULL) {
 		if (!zend_hash_exists(SUHOSIN_G(func_whitelist), lcname, function_name_strlen+1)) {
-			suhosin_log(S_EXECUTOR, "function outside of whitelist called: %s()", lcname);
-			goto execute_internal_bailout;
+		    suhosin_log(S_EXECUTOR, "function outside of whitelist called: %s()", lcname);
+		    FUNCTION_WARNING()
+		    suhosin_bailout(TSRMLS_C);
 		}
 	} else if (SUHOSIN_G(func_blacklist) != NULL) {
 		if (zend_hash_exists(SUHOSIN_G(func_blacklist), lcname, function_name_strlen+1)) {
-			suhosin_log(S_EXECUTOR, "function within blacklist called: %s()", lcname);
-			goto execute_internal_bailout;
+		    suhosin_log(S_EXECUTOR, "function within blacklist called: %s()", lcname);
+		    FUNCTION_WARNING()
+		    suhosin_bailout(TSRMLS_C);
 		}
 	}
 	
@@ -1222,16 +1210,6 @@ static void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int re
 	} else {
 		old_execute_internal(execute_data_ptr, return_value_used TSRMLS_CC);
 	}
-	if (free_lcname == 1) {
-		efree(lcname);
-	}
-	return;
-execute_internal_bailout:
-	if (free_lcname == 1) {
-		efree(lcname);
-	}
-	FUNCTION_WARNING()
-	suhosin_bailout(TSRMLS_C);
 }
 /* }}} */
 
