@@ -1,9 +1,3 @@
-2006-11-28 - 0.9.15
-
-    - Added a transparent protection for open phpinfo() pages by
-      adding an HTML META ROBOTS tag to the output that forbids 
-      indexing and archiving
-
 2006-11-22 - 0.9.14
 
     - Drop wrongly decrypted cookies instead of leaving them empty
