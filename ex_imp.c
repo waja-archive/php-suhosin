@@ -143,12 +143,6 @@ PHP_FUNCTION(suhosin_extract)
 			break;
 	}
 	
-#if PHP_VERSION_ID >= 50300	
-	if (!EG(active_symbol_table)) {
-		zend_rebuild_symbol_table(TSRMLS_C);
-	}
-#endif
-	
 	if (extract_type < EXTR_OVERWRITE || extract_type > EXTR_IF_EXISTS) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Unknown extract type");
 		return;

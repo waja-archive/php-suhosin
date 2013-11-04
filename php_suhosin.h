@@ -22,7 +22,7 @@
 #ifndef PHP_SUHOSIN_H
 #define PHP_SUHOSIN_H
 
-#define SUHOSIN_EXT_VERSION  "0.9.29"
+#define SUHOSIN_EXT_VERSION  "0.9.27"
 
 /*#define SUHOSIN_DEBUG*/
 #define SUHOSIN_LOG "/tmp/suhosin_log.txt"
@@ -84,7 +84,7 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	long max_execution_depth;
 	zend_bool	abort_request;
 	long executor_include_max_traversal;
-        zend_bool executor_include_allow_writable_files;
+	
 
 
 	HashTable *include_whitelist;
@@ -218,7 +218,6 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	zend_bool	coredump;
 	zend_bool	apc_bug_workaround;
 	zend_bool	already_scanned;
-        zend_bool       do_not_scan;
 	
 	zend_bool	server_encode;
 	zend_bool	server_strip;

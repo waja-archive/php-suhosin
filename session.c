@@ -205,7 +205,7 @@ void suhosin_get_ipv4(char *buf TSRMLS_DC)
 
 
 	if (raddr == NULL) {
-		memset(buf, 0, 4);
+		memset(buf, 4, 0);
 		return;
 	}
 	
@@ -493,13 +493,11 @@ regenerate:
 	if (r == SUCCESS && SUHOSIN_G(session_encrypt) && *vallen > 0) {
 		char cryptkey[33];
 	
-                SUHOSIN_G(do_not_scan) = 1;
 		suhosin_generate_key(SUHOSIN_G(session_cryptkey), SUHOSIN_G(session_cryptua), SUHOSIN_G(session_cryptdocroot), SUHOSIN_G(session_cryptraddr), (char *)&cryptkey TSRMLS_CC);
 	
 		v = *val;
 		i = *vallen;
 		*val = suhosin_decrypt_string(v, i, "", 0, (char *)&cryptkey, vallen, SUHOSIN_G(session_checkraddr) TSRMLS_CC);
-                SUHOSIN_G(do_not_scan) = 0;
         if (*val == NULL) {
             *val = estrndup("", 0);
             *vallen = 0;
@@ -526,14 +524,10 @@ static int suhosin_hook_s_write(void **mod_data, const char *key, const char *va
 
 	if (r > 0 && SUHOSIN_G(session_encrypt)) {
 		char cryptkey[33];
-
-                SUHOSIN_G(do_not_scan) = 1;
 	
 		suhosin_generate_key(SUHOSIN_G(session_cryptkey), SUHOSIN_G(session_cryptua), SUHOSIN_G(session_cryptdocroot), SUHOSIN_G(session_cryptraddr), (char *)&cryptkey TSRMLS_CC);
 		
 		v = suhosin_encrypt_string(v, vallen, "", 0, (char *)&cryptkey TSRMLS_CC);
-		
-		SUHOSIN_G(do_not_scan) = 0;
 		r = strlen(v);
 	}
 
@@ -630,19 +624,7 @@ void suhosin_hook_session(TSRMLS_D)
 	if (zend_hash_find(&module_registry, "session", sizeof("session"), (void**)&module) == FAILURE) {
 		return;
 	}
-    /* retrieve globals from module entry struct if possible */
-#if PHP_VERSION_ID >= 50200
-#ifdef ZTS
-    if (session_globals_id == 0) {
-        session_globals_id = *module->globals_id_ptr;
-    }
-#else
-    if (session_globals == NULL) {
-        session_globals = module->globals_ptr;
-    }
-#endif
-#else
-	/* retrieve globals from symbols if PHP version is old */
+	/* retrieve globals */
 #ifdef ZTS
 	if (session_globals_id == 0) {
 		ps_globals_id_ptr = DL_FETCH_SYMBOL(module->handle, "ps_globals_id");
@@ -665,7 +647,6 @@ void suhosin_hook_session(TSRMLS_D)
 			return;
 		}
 	}
-#endif
 #endif
 	if (old_OnUpdateSaveHandler != NULL) {
 		return;

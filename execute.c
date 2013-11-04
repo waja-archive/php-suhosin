@@ -87,7 +87,6 @@ conts:
 #define SUHOSIN_CODE_TYPE_BADFILE	12
 #define SUHOSIN_CODE_TYPE_LONGNAME	13
 #define SUHOSIN_CODE_TYPE_MANYDOTS	14
-#define SUHOSIN_CODE_TYPE_WRITABLE      15
 
 static int suhosin_check_filename(char *s, int len TSRMLS_DC)
 {
@@ -118,7 +117,7 @@ static int suhosin_check_filename(char *s, int len TSRMLS_DC)
 			return SUHOSIN_CODE_TYPE_UPLOADED;
 		}
 	}
-		
+	
 	/* count number of directory traversals */
 	for (i=0; i < len-3; i++) {
 		if (s[i] == '.' && s[i+1] == '.' && (s[i+2] == '/' || s[i+2] == '\\')) {
@@ -220,16 +219,6 @@ SDEBUG("xxx %08x %08x",SUHOSIN_G(include_whitelist),SUHOSIN_G(include_blacklist)
 			s = h + 1;
 		} while (1);
 	}
-
-	/* disallow writable files */
-	if (!SUHOSIN_G(executor_include_allow_writable_files)) {
-	        /* protection against *REMOTE* attacks, potential
-	           race condition of access() is irrelevant */
-	        if (access(s, W_OK) == 0) {
-                        return SUHOSIN_CODE_TYPE_WRITABLE;
-	        }
-	}
-
 	return SUHOSIN_CODE_TYPE_GOODFILE;
 }
 
@@ -269,11 +258,6 @@ static zend_bool suhosin_zend_open(const char *filename, zend_file_handle *fh)
 			suhosin_log(S_INCLUDE, "Include filename contains an ASCIIZ character");
 			suhosin_bailout(TSRMLS_C);
 			break;
-		
-		    case SUHOSIN_CODE_TYPE_WRITABLE:
-			suhosin_log(S_INCLUDE, "Include filename ('%s') is writable by PHP process", filename);
-			suhosin_bailout(TSRMLS_C);
-			break;		    	
 
 		    case SUHOSIN_CODE_TYPE_BLACKURL:
 			suhosin_log(S_INCLUDE, "Include filename ('%s') is an URL that is forbidden by the blacklist", filename);
@@ -539,11 +523,6 @@ not_evaled_code:
 			suhosin_log(S_INCLUDE, "Include filename contains an ASCIIZ character");
 			suhosin_bailout(TSRMLS_C);
 			break;
-			
-    		case SUHOSIN_CODE_TYPE_WRITABLE:
-    		        suhosin_log(S_INCLUDE, "Include filename ('%s') is writable by PHP process", op_array->filename);
-    			suhosin_bailout(TSRMLS_C);
-    			break;		    	
 
 	    case SUHOSIN_CODE_TYPE_BLACKURL:
 			suhosin_log(S_INCLUDE, "Include filename ('%s') is an URL that is forbidden by the blacklist", op_array->filename);
