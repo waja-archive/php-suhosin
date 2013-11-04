@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: execute.c,v 1.43 2007-04-12 09:37:43 sesser Exp $ */
+/* $Id: execute.c,v 1.42 2007-03-04 18:00:25 sesser Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -1081,7 +1081,6 @@ internal_function_handler ihandlers[] = {
     { NULL, NULL, NULL, NULL, NULL }
 };
 
-#define FUNCTION_WARNING() zend_error(E_WARNING, "%s() has been disabled for security reasons", get_active_function_name(TSRMLS_C));
 
 /* {{{ void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int return_value_used TSRMLS_DC)
  *    This function provides a hook for internal execution */
@@ -1109,13 +1108,11 @@ static void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int re
 		if (SUHOSIN_G(eval_whitelist) != NULL) {
 			if (!zend_hash_exists(SUHOSIN_G(eval_whitelist), lcname, function_name_strlen+1)) {
 			    suhosin_log(S_EXECUTOR, "function outside of eval whitelist called: %s()", lcname);
-			    FUNCTION_WARNING()
 			    suhosin_bailout(TSRMLS_C);
 			}
 		} else if (SUHOSIN_G(eval_blacklist) != NULL) {
 			if (zend_hash_exists(SUHOSIN_G(eval_blacklist), lcname, function_name_strlen+1)) {
 			    suhosin_log(S_EXECUTOR, "function within eval blacklist called: %s()", lcname);
-			    FUNCTION_WARNING()
 			    suhosin_bailout(TSRMLS_C);
 			}
 		}
@@ -1124,13 +1121,11 @@ static void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int re
 	if (SUHOSIN_G(func_whitelist) != NULL) {
 		if (!zend_hash_exists(SUHOSIN_G(func_whitelist), lcname, function_name_strlen+1)) {
 		    suhosin_log(S_EXECUTOR, "function outside of whitelist called: %s()", lcname);
-		    FUNCTION_WARNING()
 		    suhosin_bailout(TSRMLS_C);
 		}
 	} else if (SUHOSIN_G(func_blacklist) != NULL) {
 		if (zend_hash_exists(SUHOSIN_G(func_blacklist), lcname, function_name_strlen+1)) {
 		    suhosin_log(S_EXECUTOR, "function within blacklist called: %s()", lcname);
-		    FUNCTION_WARNING()
 		    suhosin_bailout(TSRMLS_C);
 		}
 	}

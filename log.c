@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: log.c,v 1.18 2007-05-19 21:31:56 sesser Exp $ 
+  $Id: log.c,v 1.16 2007-03-04 10:22:54 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -29,7 +29,6 @@
 #include <fcntl.h>
 #include "SAPI.h"
 #include "ext/standard/datetime.h"
-#include "ext/standard/flock_compat.h"
 
 #ifdef HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
@@ -230,7 +229,7 @@ log_file:
 	}
 	
 	if (!SUHOSIN_G(log_filename) || !SUHOSIN_G(log_filename)[0]) {
-		goto log_sapi;
+		goto log_file;
 	}
 	fd = open(SUHOSIN_G(log_filename), O_CREAT|O_APPEND|O_WRONLY, 0640);
 	if (fd == -1) {
@@ -244,7 +243,6 @@ log_file:
 	ap_php_snprintf(error, sizeof(error), "%s %2d %02d:%02d:%02d [%u] %s\n", month_names[tm.tm_mon], tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, getpid(),buf);
 	towrite = strlen(error);
 	wbuf = error;
-	php_flock(fd, LOCK_EX);
 	while (towrite > 0) {
 		written = write(fd, wbuf, towrite);
 		if (written < 0) {
@@ -253,7 +251,6 @@ log_file:
 		towrite -= written;
 		wbuf += written;
 	}
-	php_flock(fd, LOCK_UN);
 	close(fd);
 
 log_sapi:

@@ -16,12 +16,12 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: php_suhosin.h,v 1.62 2007-05-19 21:31:56 sesser Exp $ */
+/* $Id: php_suhosin.h,v 1.58 2007-03-06 10:43:52 sesser Exp $ */
 
 #ifndef PHP_SUHOSIN_H
 #define PHP_SUHOSIN_H
 
-#define SUHOSIN_EXT_VERSION  "0.9.20"
+#define SUHOSIN_EXT_VERSION  "0.9.18"
 
 /*#define SUHOSIN_DEBUG*/
 #define SUHOSIN_LOG "/tmp/suhosin_log.txt"
@@ -105,7 +105,6 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	long  max_array_depth;
 	long  max_array_index_length;
 	zend_bool  disallow_nul;
-	zend_bool  disallow_ws;
 /*	cookie variables */
 	long  max_cookie_vars;
 	long  cur_cookie_vars;
@@ -115,7 +114,6 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	long  max_cookie_array_depth;
 	long  max_cookie_array_index_length;
 	zend_bool  disallow_cookie_nul;
-	zend_bool  disallow_cookie_ws;
 /*	get variables */
 	long  max_get_vars;
 	long  cur_get_vars;
@@ -125,7 +123,6 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	long  max_get_array_depth;
 	long  max_get_array_index_length;
 	zend_bool  disallow_get_nul;
-	zend_bool  disallow_get_ws;
 /*	post variables */
 	long  max_post_vars;
 	long  cur_post_vars;
@@ -135,7 +132,6 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	long  max_post_array_depth;
 	long  max_post_array_index_length;
 	zend_bool  disallow_post_nul;
-	zend_bool  disallow_post_ws;
 
 /*	fileupload */
 	long  upload_limit;
@@ -215,18 +211,6 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	zend_bool	coredump;
 	zend_bool	apc_bug_workaround;
 	zend_bool	already_scanned;
-
-    /* PERDIR Handling */
-    char *perdir;
-    zend_bool log_perdir;
-    zend_bool exec_perdir;
-    zend_bool get_perdir;
-    zend_bool post_perdir;
-    zend_bool cookie_perdir;
-    zend_bool request_perdir;
-    zend_bool upload_perdir;
-    zend_bool sql_perdir;
-    zend_bool misc_perdir;
 
 ZEND_END_MODULE_GLOBALS(suhosin)
 

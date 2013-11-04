@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: treat_data.c,v 1.11 2007-05-15 08:08:23 sesser Exp $ 
+  $Id: treat_data.c,v 1.10 2007-03-04 17:54:05 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -134,9 +134,6 @@ SAPI_TREAT_DATA_FUNC(suhosin_treat_data)
 	var = php_strtok_r(res, separator, &strtok_buf);
 	
 	while (var) {
-		/* Overjump plain whitespace */
-		while (*var && *var == ' ') var++;
-
 		val = strchr(var, '=');
 		if (val) { /* have a value */
 			int val_len;

@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: ifilter.c,v 1.13 2007-05-19 21:31:56 sesser Exp $ 
+  $Id: ifilter.c,v 1.9 2007-03-04 17:54:05 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -151,7 +151,7 @@ void suhosin_register_server_variables(zval *track_vars_array TSRMLS_DC)
 		retval+= zend_hash_exists(svars, "HTTP_SERVER_VARS", sizeof("HTTP_SERVER_VARS"));
 		retval+= zend_hash_exists(svars, "HTTP_SESSION_VARS", sizeof("HTTP_SESSION_VARS"));
 		retval+= zend_hash_exists(svars, "HTTP_POST_FILES", sizeof("HTTP_POST_FILES"));
-		retval+= zend_hash_exists(svars, "HTTP_RAW_POST_DATA", sizeof("HTTP_RAW_POST_DATA"));
+		retval+= zend_hash_exists(svars, "HTTP_RAW_POST_DATAS", sizeof("HTTP_RAW_POST_DATA"));
 		if (retval > 0) failure = 1;
 	}
         
@@ -273,41 +273,6 @@ unsigned int suhosin_input_filter(int arg, char *var, char **val, unsigned int v
 			break;
 	}
 	
-	/* Drop this variable if it begins with whitespace which is disallowed */
-	if (*var == ' ') {
-		if (SUHOSIN_G(disallow_ws)) {
-			suhosin_log(S_VARS, "request variable name begins with disallowed whitespace - dropped variable '%s'", var);
-			if (!SUHOSIN_G(simulation)) {
-				return 0;
-			}
-		}
-		switch (arg) {
-		    case PARSE_GET:
-			    if (SUHOSIN_G(disallow_get_ws)) {
-				    suhosin_log(S_VARS, "GET variable name begins with disallowed whitespace - dropped variable '%s'", var);
-				    if (!SUHOSIN_G(simulation)) {
-					    return 0;
-				    }
-			    }
-			    break;
-		    case PARSE_POST:
-			    if (SUHOSIN_G(disallow_post_ws)) {
-				    suhosin_log(S_VARS, "POST variable name begins with disallowed whitespace - dropped variable '%s'", var);
-				    if (!SUHOSIN_G(simulation)) {
-					    return 0;
-				    }
-			    }
-			    break;
-		    case PARSE_COOKIE:
-			    if (SUHOSIN_G(disallow_cookie_ws)) {
-				    suhosin_log(S_VARS, "COOKIE variable name begins with disallowed whitespace - dropped variable '%s'", var);
-				    if (!SUHOSIN_G(simulation)) {
-					    return 0;
-				    }
-			    }
-			    break;
-		}
-	}
 	
 	/* Drop this variable if it exceeds the value length limit */
 	if (SUHOSIN_G(max_value_length) && SUHOSIN_G(max_value_length) < val_len) {
@@ -608,10 +573,8 @@ protected_varname:
  */
 void suhosin_hook_register_server_variables()
 {
-	if (sapi_module.register_server_variables) {
-		orig_register_server_variables = sapi_module.register_server_variables;
-		sapi_module.register_server_variables = suhosin_register_server_variables;
-	}
+	orig_register_server_variables = sapi_module.register_server_variables;
+	sapi_module.register_server_variables = suhosin_register_server_variables;
 }
 /* }}} */
 
