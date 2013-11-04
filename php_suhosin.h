@@ -17,12 +17,12 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: php_suhosin.h,v 1.4 2008-01-13 22:50:37 sesser Exp $ */
+/* $Id: php_suhosin.h,v 1.2 2007-11-28 16:16:01 sesser Exp $ */
 
 #ifndef PHP_SUHOSIN_H
 #define PHP_SUHOSIN_H
 
-#define SUHOSIN_EXT_VERSION  "0.9.23"
+#define SUHOSIN_EXT_VERSION  "0.9.22"
 
 /*#define SUHOSIN_DEBUG*/
 #define SUHOSIN_LOG "/tmp/suhosin_log.txt"
@@ -314,79 +314,6 @@ extern unsigned int (*old_input_filter)(int arg, char *var, char **val, unsigned
 void normalize_varname(char *varname);
 int suhosin_rfc1867_filter(unsigned int event, void *event_data, void **extra TSRMLS_DC);
 void suhosin_bailout(TSRMLS_D);
-
-/* Add pseudo refcount macros for PHP version < 5.3 */
-#ifndef Z_REFCOUNT_PP
-
-#define Z_REFCOUNT_PP(ppz)		Z_REFCOUNT_P(*(ppz))
-#define Z_SET_REFCOUNT_PP(ppz, rc)	Z_SET_REFCOUNT_P(*(ppz), rc)
-#define Z_ADDREF_PP(ppz)		Z_ADDREF_P(*(ppz))
-#define Z_DELREF_PP(ppz)		Z_DELREF_P(*(ppz))
-#define Z_ISREF_PP(ppz)			Z_ISREF_P(*(ppz))
-#define Z_SET_ISREF_PP(ppz)		Z_SET_ISREF_P(*(ppz))
-#define Z_UNSET_ISREF_PP(ppz)		Z_UNSET_ISREF_P(*(ppz))
-#define Z_SET_ISREF_TO_PP(ppz, isref)	Z_SET_ISREF_TO_P(*(ppz), isref)
-
-#define Z_REFCOUNT_P(pz)		zval_refcount_p(pz)
-#define Z_SET_REFCOUNT_P(pz, rc)	zval_set_refcount_p(pz, rc)
-#define Z_ADDREF_P(pz)			zval_addref_p(pz)
-#define Z_DELREF_P(pz)			zval_delref_p(pz)
-#define Z_ISREF_P(pz)			zval_isref_p(pz)
-#define Z_SET_ISREF_P(pz)		zval_set_isref_p(pz)
-#define Z_UNSET_ISREF_P(pz)		zval_unset_isref_p(pz)
-#define Z_SET_ISREF_TO_P(pz, isref)	zval_set_isref_to_p(pz, isref)
-
-#define Z_REFCOUNT(z)			Z_REFCOUNT_P(&(z))
-#define Z_SET_REFCOUNT(z, rc)		Z_SET_REFCOUNT_P(&(z), rc)
-#define Z_ADDREF(z)			Z_ADDREF_P(&(z))
-#define Z_DELREF(z)			Z_DELREF_P(&(z))
-#define Z_ISREF(z)			Z_ISREF_P(&(z))
-#define Z_SET_ISREF(z)			Z_SET_ISREF_P(&(z))
-#define Z_UNSET_ISREF(z)		Z_UNSET_ISREF_P(&(z))
-#define Z_SET_ISREF_TO(z, isref)	Z_SET_ISREF_TO_P(&(z), isref)
-
-#if defined(__GNUC__)
-#define zend_always_inline inline __attribute__((always_inline))
-#elif defined(_MSC_VER)
-#define zend_always_inline __forceinline
-#else
-#define zend_always_inline inline
-#endif
-
-static zend_always_inline zend_uint zval_refcount_p(zval* pz) {
-	return pz->refcount;
-}
-
-static zend_always_inline zend_uint zval_set_refcount_p(zval* pz, zend_uint rc) {
-	return pz->refcount = rc;
-}
-
-static zend_always_inline zend_uint zval_addref_p(zval* pz) {
-	return ++pz->refcount;
-}
-
-static zend_always_inline zend_uint zval_delref_p(zval* pz) {
-	return --pz->refcount;
-}
-
-static zend_always_inline zend_bool zval_isref_p(zval* pz) {
-	return pz->is_ref;
-}
-
-static zend_always_inline zend_bool zval_set_isref_p(zval* pz) {
-	return pz->is_ref = 1;
-}
-
-static zend_always_inline zend_bool zval_unset_isref_p(zval* pz) {
-	return pz->is_ref = 0;
-}
-
-static zend_always_inline zend_bool zval_set_isref_to_p(zval* pz, zend_bool isref) {
-	return pz->is_ref = isref;
-}
-
-#endif
-
 
 #endif	/* PHP_SUHOSIN_H */
 

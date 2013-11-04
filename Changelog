@@ -1,8 +1,3 @@
-2008-01-14 - 0.9.23
-
-    - Fixed suhosin extension now compiles with snapshots of PHP 5.3
-    - Fixed crypt() behaves like normal again when there is no salt supplied
-
 2007-12-01 - 0.9.22
 
     - Removed LFS warning message because it crashed on several systems

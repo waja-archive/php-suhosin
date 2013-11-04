@@ -17,7 +17,7 @@
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: ex_imp.c,v 1.2 2008-01-04 11:23:47 sesser Exp $ 
+  $Id: ex_imp.c,v 1.1.1.1 2007-11-28 01:15:35 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -235,10 +235,10 @@ PHP_FUNCTION(suhosin_extract)
 
 						*orig_var = *entry;
 					} else {
-						if (Z_REFCOUNT_PP(var_array) > 1) {
+						if ((*var_array)->refcount > 1) {
 							SEPARATE_ZVAL_TO_MAKE_IS_REF(entry);
 						} else {
-							Z_SET_ISREF_PP(entry);
+							(*entry)->is_ref = 1;
 						}
 						zval_add_ref(entry);
 						zend_hash_update(EG(active_symbol_table), final_name.c, final_name.len+1, (void **) entry, sizeof(zval *), NULL);
@@ -334,7 +334,7 @@ static int copy_request_variable(void *pDest, int num_args, va_list args, zend_h
 #else
 	zend_hash_del(&EG(symbol_table), new_key, new_key_len-1);
 #endif
-	ZEND_SET_SYMBOL_WITH_LENGTH(&EG(symbol_table), new_key, new_key_len, *var, Z_REFCOUNT_PP(var)+1, 0);
+	ZEND_SET_SYMBOL_WITH_LENGTH(&EG(symbol_table), new_key, new_key_len, *var, (*var)->refcount+1, 0);
 
 	efree(new_key);
 	return 0;
