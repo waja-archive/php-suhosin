@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: execute.c,v 1.42 2007-03-04 18:00:25 sesser Exp $ */
+/* $Id: execute.c,v 1.38 2006-12-02 22:56:06 root Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -755,173 +755,11 @@ int ih_mail(IH_HANDLER_PARAMS)
 	return (0);
 }
 
-#define SQLSTATE_SQL        0
-#define SQLSTATE_IDENTIFIER 1
-#define SQLSTATE_STRING     2
-#define SQLSTATE_COMMENT    3
-#define SQLSTATE_MLCOMMENT  4
-
-int ih_querycheck(IH_HANDLER_PARAMS)
-{
-	void **p = EG(argument_stack).top_element-2;
-	unsigned long arg_count;
-	zval **arg;
-	char *query, *s, *e;
-	zval *backup;
-	int len;
-	char quote;
-	int state = SQLSTATE_SQL;
-	int cnt_union = 0, cnt_select = 0, cnt_comment = 0, cnt_opencomment = 0;
-	int mysql_extension = 0;
-
-	
-	SDEBUG("function: %s", ih->name);
-	arg_count = (unsigned long) *p;
-
-	if (ht < (long) ih->arg1) {
-		return (0);
-	}
-    
-	if ((long) ih->arg1) {
-    	    mysql_extension = 1;
-	}
-	
-	arg = (zval **) p - (arg_count - (long) ih->arg1 + 1); /* count from 0 */
-
-	backup = *arg;
-	if (Z_TYPE_P(backup) != IS_STRING) {
-		return (0);
-	}
-	len = Z_STRLEN_P(backup);
-	query = Z_STRVAL_P(backup);
-	
-	s = query;
-	e = s+len;
-	
-	while (s < e) {
-	    switch (state)
-	    {
-    		case SQLSTATE_SQL:
-    		    switch (s[0])
-    		    {
-        		case '`':
-        		    state = SQLSTATE_IDENTIFIER;
-        		    quote = '`';
-        		    break;
-        		case '\'':
-        		case '"':
-        		    state = SQLSTATE_STRING;
-        		    quote = *s;
-        		    break;
-        		case '/':
-        		    if (s[1]=='*') {
-                        if (mysql_extension == 1 && s[2] == '!') {
-                            s += 2;
-                            break;
-                        }
-            			s++;
-            			state = SQLSTATE_MLCOMMENT;
-        			    cnt_comment++;
-        		    }
-        		    break;
-    			case '-':
-        		    if (s[1]=='-') {
-        			s++;
-        			state = SQLSTATE_COMMENT;
-        			cnt_comment++;
-        		    }
-        		    break;
-    			case '#':
-        		    state = SQLSTATE_COMMENT;
-        		    cnt_comment++;
-        		    break;
-        		case 'u':
-    			case 'U':
-        		    if (strncasecmp("union", s, 5)==0) {
-            			s += 4;
-        			cnt_union++;
-        		    }
-        		    break;
-    			case 's':
-    			case 'S':
-        		    if (strncasecmp("select", s, 6)==0) {
-            			s += 5;
-        			cnt_select++;
-        		    }
-        		    break;
-    		    }
-    		    break;
-    		case SQLSTATE_STRING:
-		case SQLSTATE_IDENTIFIER:
-    		    if (s[0] == quote) {
-        		if (s[1] == quote) {
-        		    s++;
-    			} else {
-        		    state = SQLSTATE_SQL;
-    			}
-    		    }
-    		    if (s[0] == '\\') {
-    			s++;
-    		    }
-    		    break;
-		case SQLSTATE_COMMENT:
-    		    while (s[0] && s[0] != '\n') {
-    			s++;        
-    		    }
-    		    state = SQLSTATE_SQL;
-    		    break;
-    		case SQLSTATE_MLCOMMENT:
-    		    while (s[0] && (s[0] != '*' || s[1] != '/')) {
-    			s++;
-    		    }
-    		    if (s[0]) {
-    			state = SQLSTATE_SQL;
-    		    }
-    		    break;
-	    }
-	    s++;
-	}
-	if (state == SQLSTATE_MLCOMMENT) {
-	    cnt_opencomment = 1;
-	}
-	
-	if (cnt_opencomment && SUHOSIN_G(sql_opencomment)>0) {
-	    suhosin_log(S_SQL, "Open comment in SQL query: '%*s'", len, query);
-	    if (SUHOSIN_G(sql_opencomment)>1) {
-		suhosin_bailout(TSRMLS_C);
-	    }
-	}
-	
-	if (cnt_comment && SUHOSIN_G(sql_comment)>0) {
-	    suhosin_log(S_SQL, "Comment in SQL query: '%*s'", len, query);
-	    if (SUHOSIN_G(sql_comment)>1) {
-		suhosin_bailout(TSRMLS_C);
-	    }
-	}
-
-	if (cnt_union && SUHOSIN_G(sql_union)>0) {
-	    suhosin_log(S_SQL, "UNION in SQL query: '%*s'", len, query);
-	    if (SUHOSIN_G(sql_union)>1) {
-		suhosin_bailout(TSRMLS_C);
-	    }
-	}
-
-	if (cnt_select>1 && SUHOSIN_G(sql_mselect)>0) {
-	    suhosin_log(S_SQL, "Multiple SELECT in SQL query: '%*s'", len, query);
-	    if (SUHOSIN_G(sql_mselect)>1) {
-		suhosin_bailout(TSRMLS_C);
-	    }
-	}
-    
-	return (0);
-}
-
-
 int ih_fixusername(IH_HANDLER_PARAMS)
 {
 	void **p = EG(argument_stack).top_element-2;
 	unsigned long arg_count;
-	zval **arg;char *prefix, *postfix, *user;
+	zval **arg;char *prefix, *postfix;
 	zval *backup, *my_user;
 	int prefix_len, postfix_len, len;
 	
@@ -954,35 +792,29 @@ int ih_fixusername(IH_HANDLER_PARAMS)
 	arg = (zval **) p - (arg_count - (long) ih->arg1 + 1); /* count from 0 */
 
 	backup = *arg;
-	if (Z_TYPE_P(backup) != IS_STRING) {
-		user = "";
-		len = 0;
-	} else {
-		len = Z_STRLEN_P(backup);
-		user = Z_STRVAL_P(backup);
-	}
+	len = Z_STRLEN_P(backup);
 
 	if (prefix_len && prefix_len <= len) {
-		if (strncmp(prefix, user, prefix_len)==0) {
+		if (strncmp(prefix, Z_STRVAL_P(backup), prefix_len)==0) {
 			prefix = "";
 			len -= prefix_len;
 		}
 	}
 	
 	if (postfix_len && postfix_len <= len) {
-		if (strncmp(postfix, user+len-postfix_len, postfix_len)==0) {
+		if (strncmp(postfix, Z_STRVAL_P(backup)+Z_STRLEN_P(backup)-len, postfix_len)==0) {
 			postfix = "";
 		}
 	}
 	
 	MAKE_STD_ZVAL(my_user);
 	my_user->type = IS_STRING;
-	my_user->value.str.len = spprintf(&my_user->value.str.val, 0, "%s%s%s", prefix, user, postfix);
+	my_user->value.str.len = spprintf(&my_user->value.str.val, 0, "%s%s%s", prefix, Z_STRVAL_P(backup), postfix);
 	
 	/* XXX: memory_leak? */
 	*arg = my_user;	
 	 
-	SDEBUG("function: %s - user: %s", ih->name, user);
+	SDEBUG("function: %s - user: %s", ih->name, Z_STRVAL_PP(arg));
 
 	return (0);
 }
@@ -1064,15 +896,6 @@ internal_function_handler ihandlers[] = {
     { "mssql_connect", ih_fixusername, (void *)2, NULL, NULL },
     { "mssql_pconnect", ih_fixusername, (void *)2, NULL, NULL },
 
-    { "mysql_query", ih_querycheck, (void *)1, (void *)1, NULL },
-    { "mysql_db_query", ih_querycheck, (void *)2, (void *)1, NULL },
-    { "mysql_unbuffered_query", ih_querycheck, (void *)1, (void *)1, NULL },
-    { "mysqli_query", ih_querycheck, (void *)2, (void *)1, NULL },
-    { "mysqli_real_query", ih_querycheck, (void *)2, (void *)1, NULL },
-    { "mysqli_send_query", ih_querycheck, (void *)2, (void *)1, NULL },
-    { "mysqli_master_query", ih_querycheck, (void *)2, (void *)1, NULL },
-    { "mysqli_slave_query", ih_querycheck, (void *)2, (void *)1, NULL },
-
     { "mysqli", ih_fixusername, (void *)2, NULL, NULL },
     { "mysql_connect", ih_fixusername, (void *)2, NULL, NULL },
     { "mysql_pconnect", ih_fixusername, (void *)2, NULL, NULL },
@@ -1094,11 +917,7 @@ static void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int re
 	
 	lcname = ((zend_internal_function *) execute_data_ptr->function_state.function)->function_name;
 	function_name_strlen = strlen(lcname);
-#ifdef ZEND_ENGINE_2  
 	return_value = (*(temp_variable *)((char *) execute_data_ptr->Ts + execute_data_ptr->opline->result.u.var)).var.ptr;
-#else
-    return_value = execute_data_ptr->Ts[execute_data_ptr->opline->result.u.var].var.ptr;
-#endif
 	ht = execute_data_ptr->opline->extended_value;
 
 	SDEBUG("function: %s", lcname);

@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: memory_limit.c,v 1.5 2007-03-04 09:57:47 sesser Exp $ 
+  $Id: memory_limit.c,v 1.4 2006-08-25 21:00:07 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -47,7 +47,7 @@ static PHP_INI_MH(suhosin_OnChangeMemoryLimit)
 	}
 	if (new_value) {
 		PG(memory_limit) = zend_atoi(new_value, new_value_length);
-		if (PG(memory_limit) > hard_memory_limit || PG(memory_limit) < 0) {
+		if (PG(memory_limit) > hard_memory_limit) {
 			suhosin_log(S_MISC, "script tried to increase memory_limit to %u bytes which is above the allowed value", PG(memory_limit));
 			if (!SUHOSIN_G(simulation)) {
 				PG(memory_limit) = hard_memory_limit;

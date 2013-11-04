@@ -16,12 +16,12 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: php_suhosin.h,v 1.57 2007-03-04 18:03:08 sesser Exp $ */
+/* $Id: php_suhosin.h,v 1.52 2006-12-02 22:25:35 root Exp $ */
 
 #ifndef PHP_SUHOSIN_H
 #define PHP_SUHOSIN_H
 
-#define SUHOSIN_EXT_VERSION  "0.9.17"
+#define SUHOSIN_EXT_VERSION  "0.9.16"
 
 /*#define SUHOSIN_DEBUG*/
 #define SUHOSIN_LOG "/tmp/suhosin_log.txt"
@@ -73,10 +73,6 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	char *filter_action;
 	char *sql_user_prefix;
 	char *sql_user_postfix;
-	long	sql_comment;
-	long	sql_opencomment;
-	long	sql_union;
-	long	sql_mselect;
 	
 	long max_execution_depth;
 	zend_bool	abort_request;
@@ -160,8 +156,6 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	long	log_phpscript;
 	char	*log_phpscriptname;
 	zend_bool log_phpscript_is_safe;
-	long	log_file;
-	char	*log_filename;
 
 /*	header handler */
 	zend_bool allow_multiheader;
@@ -172,7 +166,7 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 /*	memory_limit */
 	long	memory_limit;
 	long 	hard_memory_limit;
-
+	
 /*  sqlprotect */
 	zend_bool sql_bailout_on_error;
 
@@ -210,7 +204,6 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	
 	zend_bool	coredump;
 	zend_bool	apc_bug_workaround;
-	zend_bool	already_scanned;
 
 ZEND_END_MODULE_GLOBALS(suhosin)
 
@@ -283,8 +276,6 @@ void suhosin_aes_gkey(int nb,int nk,char *key TSRMLS_DC);
 void suhosin_aes_encrypt(char *buff TSRMLS_DC);
 void suhosin_aes_decrypt(char *buff TSRMLS_DC);
 unsigned int suhosin_input_filter(int arg, char *var, char **val, unsigned int val_len, unsigned int *new_val_len TSRMLS_DC);
-unsigned int suhosin_input_filter_wrapper(int arg, char *var, char **val, unsigned int val_len, unsigned int *new_val_len TSRMLS_DC);
-unsigned int (*old_input_filter)(int arg, char *var, char **val, unsigned int val_len, unsigned int *new_val_len TSRMLS_DC);
 void normalize_varname(char *varname);
 int suhosin_rfc1867_filter(unsigned int event, void *event_data, void **extra TSRMLS_DC);
 void suhosin_bailout(TSRMLS_D);

@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: post_handler.c,v 1.10 2007-03-04 17:54:05 sesser Exp $ 
+  $Id: post_handler.c,v 1.9 2006-09-19 13:05:57 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -64,8 +64,6 @@ SAPI_POST_HANDLER_FUNC(suhosin_std_post_handler)
 #ifdef ZEND_ENGINE_2
 				}
 #endif
-			} else {
-				SUHOSIN_G(abort_request)=1;
 			}
 			efree(val);
 		}

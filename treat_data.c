@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: treat_data.c,v 1.10 2007-03-04 17:54:05 sesser Exp $ 
+  $Id: treat_data.c,v 1.7 2006-09-09 10:44:07 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -37,9 +37,6 @@ SAPI_TREAT_DATA_FUNC(suhosin_treat_data)
 	zval *array_ptr;
 	int free_buffer = 0;
 	char *strtok_buf = NULL;
-
-	/* Mark that we were not yet called */
-	SUHOSIN_G(already_scanned) = 0;
 	
 	switch (arg) {
 		case PARSE_POST:
@@ -54,31 +51,18 @@ SAPI_TREAT_DATA_FUNC(suhosin_treat_data)
 						zval_ptr_dtor(&PG(http_globals)[TRACK_VARS_POST]);
 					}
 					PG(http_globals)[TRACK_VARS_POST] = array_ptr;
-					
-					if (SUHOSIN_G(max_request_variables) && (SUHOSIN_G(max_post_vars) == 0 || 
-					    SUHOSIN_G(max_request_variables) <= SUHOSIN_G(max_post_vars))) {
-						SUHOSIN_G(max_post_vars) = SUHOSIN_G(max_request_variables);
-					}
 					break;
 				case PARSE_GET:
 					if (PG(http_globals)[TRACK_VARS_GET]) {
 						zval_ptr_dtor(&PG(http_globals)[TRACK_VARS_GET]);
 					}
 					PG(http_globals)[TRACK_VARS_GET] = array_ptr;
-					if (SUHOSIN_G(max_request_variables) && (SUHOSIN_G(max_get_vars) == 0 || 
-					    SUHOSIN_G(max_request_variables) <= SUHOSIN_G(max_get_vars))) {
-						SUHOSIN_G(max_get_vars) = SUHOSIN_G(max_request_variables);
-					}
 					break;
 				case PARSE_COOKIE:
 					if (PG(http_globals)[TRACK_VARS_COOKIE]) {
 						zval_ptr_dtor(&PG(http_globals)[TRACK_VARS_COOKIE]);
 					}
 					PG(http_globals)[TRACK_VARS_COOKIE] = array_ptr;
-					if (SUHOSIN_G(max_request_variables) && (SUHOSIN_G(max_cookie_vars) == 0 || 
-					    SUHOSIN_G(max_request_variables) <= SUHOSIN_G(max_cookie_vars))) {
-						SUHOSIN_G(max_cookie_vars) = SUHOSIN_G(max_request_variables);
-					}					
 					break;
 			}
 			break;
@@ -190,13 +174,7 @@ SAPI_TREAT_DATA_FUNC(suhosin_treat_data)
 
 void suhosin_hook_treat_data()
 {
-	sapi_register_treat_data(suhosin_treat_data);
-#ifdef ZEND_ENGINE_2
-	if (old_input_filter == NULL) {
-		old_input_filter = sapi_module.input_filter;
-	}
-	sapi_module.input_filter = suhosin_input_filter_wrapper;
-#endif			
+	sapi_register_treat_data(suhosin_treat_data);	
 }
 
 
