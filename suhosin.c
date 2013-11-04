@@ -3,7 +3,7 @@
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
   | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007-2012 SektionEins GmbH                             |
+  | Copyright (c) 2007-2010 SektionEins GmbH                             |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -62,7 +62,7 @@ STATIC zend_extension suhosin_zend_extension_entry = {
 	SUHOSIN_EXT_VERSION,
 	"SektionEins GmbH",
 	"http://www.suhosin.org",
-	"Copyright (c) 2007-2012",
+	"Copyright (c) 2007-2010",
 	suhosin_module_startup,
 	suhosin_shutdown,
 	NULL,
@@ -191,7 +191,6 @@ static void suhosin_shutdown(zend_extension *extension)
 {
 	suhosin_unhook_execute();
 	suhosin_unhook_header_handler();
-	suhosin_unhook_post_handlers();
     
     if (ze != NULL) {
 	    ze->startup = orig_module_startup;
@@ -961,35 +960,7 @@ PHP_INI_END()
 /* }}} */
 
 
-/* {{{ suhosin_getenv
- */
-char *suhosin_getenv(char *name, size_t name_len TSRMLS_DC)
-{
-	if (sapi_module.getenv) { 
-		char *value, *tmp = sapi_module.getenv(name, name_len TSRMLS_CC);
-		if (tmp) {
-			value = estrdup(tmp);
-		} else {
-			return NULL;
-		}
-		return value;
-	} else {
-		/* fallback to the system's getenv() function */
-		char *tmp;
-		
-		name = estrndup(name, name_len);
-		tmp = getenv(name);
-		efree(name);
-		if (tmp) {
-			return(estrdup(tmp));
-		}
-	}
-	return NULL;
-}
-/* }}} */
-
-
-/* {{{ suhosin_bailout
+/* {{{ php_suhosin_init_globals
  */
 void suhosin_bailout(TSRMLS_D)
 {
@@ -1097,19 +1068,21 @@ PHP_MINIT_FUNCTION(suhosin)
 
 	/* now hook a bunch of stuff */
 	suhosin_hook_memory_limit();
+	suhosin_hook_crypt();
 	suhosin_hook_sha256();
 	suhosin_hook_ex_imp();
 
 	/* register the logo for phpinfo */
 	php_register_info_logo(SUHOSIN_LOGO_GUID, "image/jpeg", suhosin_logo, sizeof(suhosin_logo));
 
-#if PHP_MAJOR_VERSION < 5
-	php_error_docref(NULL TSRMLS_CC, E_ERROR, "Suhosin Extension is not designed to run with PHP 4 and below. Erroring Out.");
+#if PHP_MAJOR_VERSION > 5 || (PHP_MAJOR_VERSION == 5 && PHP_MINOR_VERSION >= 1)
+	/* perform LFS check */
+/*	time_t check = sapi_get_request_time(TSRMLS_C);
+	if (SG(global_request_time) != check) {
+	    zend_error(E_ERROR, "It seems that PHP and Suhosin were compiled with different binary layouts. "
+	    "This will cause problems like POST not working. Please tell your distributor to fix this.");
+	}*/
 #endif
-#if PHP_MAJOR_VERSION == 5 && PHP_MINOR_VERSION <= 2
-	php_error_docref(NULL TSRMLS_CC, E_WARNING, "Suhosin Extension does not officially support PHP 5.2 and below anymore, because it is discontinued. Use it at your own risk.");
-#endif
-
 	return SUCCESS;
 }
 /* }}} */
@@ -1231,10 +1204,10 @@ PHP_MINFO_FUNCTION(suhosin)
 	PUTS(!sapi_module.phpinfo_as_text?"<br /><br />":"\n\n");
 	if (sapi_module.phpinfo_as_text) {
 		PUTS("Copyright (c) 2006-2007 Hardened-PHP Project\n");
-		PUTS("Copyright (c) 2007-2012 SektionEins GmbH\n");
+		PUTS("Copyright (c) 2007-2010 SektionEins GmbH\n");
 	} else {
 		PUTS("Copyright (c) 2006-2007 <a href=\"http://www.hardened-php.net/\">Hardened-PHP Project</a><br />\n");
-		PUTS("Copyright (c) 2007-2012 <a href=\"http://www.sektioneins.de/\">SektionEins GmbH</a>\n");
+		PUTS("Copyright (c) 2007-2010 <a href=\"http://www.sektioneins.de/\">SektionEins GmbH</a>\n");
 	}
 	php_info_print_box_end();
 

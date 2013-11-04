@@ -3,7 +3,7 @@
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
   | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007-2012 SektionEins GmbH                             |
+  | Copyright (c) 2007-2010 SektionEins GmbH                             |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -118,12 +118,12 @@ PHP_SUHOSIN_API void suhosin_log(int loglevel, char *fmt, ...)
 	}
 	
 	if (SUHOSIN_G(log_use_x_forwarded_for)) {
-		ip_address = suhosin_getenv("HTTP_X_FORWARDED_FOR", 20 TSRMLS_CC);
+		ip_address = sapi_getenv("HTTP_X_FORWARDED_FOR", 20 TSRMLS_CC);
 		if (ip_address == NULL) {
 			ip_address = "X-FORWARDED-FOR not set";
 		}
 	} else {
-		ip_address = suhosin_getenv("REMOTE_ADDR", 11 TSRMLS_CC);
+		ip_address = sapi_getenv("REMOTE_ADDR", 11 TSRMLS_CC);
 		if (ip_address == NULL) {
 			ip_address = "REMOTE_ADDR not set";
 		}
@@ -154,7 +154,7 @@ PHP_SUHOSIN_API void suhosin_log(int loglevel, char *fmt, ...)
 		}
 		ap_php_snprintf(buf, sizeof(buf), "%s - %s (attacker '%s', file '%s', line %u)", alertstring, error, ip_address, fname, lineno);
 	} else {
-		fname = suhosin_getenv("SCRIPT_FILENAME", 15 TSRMLS_CC);
+		fname = sapi_getenv("SCRIPT_FILENAME", 15 TSRMLS_CC);
 		if (fname==NULL) {
 			fname = "unknown";
 		}

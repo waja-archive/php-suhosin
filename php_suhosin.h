@@ -3,7 +3,7 @@
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
   | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007-2012 SektionEins GmbH                             |
+  | Copyright (c) 2007-2010 SektionEins GmbH                             |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -22,7 +22,7 @@
 #ifndef PHP_SUHOSIN_H
 #define PHP_SUHOSIN_H
 
-#define SUHOSIN_EXT_VERSION  "0.9.33"
+#define SUHOSIN_EXT_VERSION  "0.9.32.1"
 
 /*#define SUHOSIN_DEBUG*/
 #define SUHOSIN_LOG "/tmp/suhosin_log.txt"
@@ -306,14 +306,13 @@ char *suhosin_encrypt_string(char *str, int len, char *var, int vlen, char *key 
 char *suhosin_decrypt_string(char *str, int padded_len, char *var, int vlen, char *key, int *orig_len, int check_ra TSRMLS_DC);
 char *suhosin_generate_key(char *key, zend_bool ua, zend_bool dr, long raddr, char *cryptkey TSRMLS_DC);
 char *suhosin_cookie_decryptor(TSRMLS_D);
-char *suhosin_getenv(char *name, size_t name_len TSRMLS_DC);
 void suhosin_hook_post_handlers(TSRMLS_D);
-void suhosin_unhook_post_handlers();
 void suhosin_hook_register_server_variables();
 void suhosin_hook_header_handler();
 void suhosin_unhook_header_handler();
 void suhosin_hook_session(TSRMLS_D);
 void suhosin_unhook_session(TSRMLS_D);
+void suhosin_hook_crypt();
 void suhosin_hook_sha256();
 void suhosin_hook_ex_imp();
 void suhosin_hook_treat_data();
