@@ -34,8 +34,6 @@
 #include "ext/standard/php_var.h"
 #include "sha256.h"
 
-#include <fcntl.h>
-
 #if defined(HAVE_HASH_EXT) && !defined(COMPILE_DL_HASH)
 # include "ext/hash/php_hash.h"
 #endif
@@ -348,7 +346,7 @@ int suhosin_session_encode(char **newstr, int *newlen TSRMLS_DC)
 	return SUCCESS;
 }
 
-static void suhosin_send_cookie(TSRMLS_D)
+static void suhosin_send_cookie()
 {
         int  * session_send_cookie = &SESSION_G(send_cookie);
         char * base;
@@ -643,7 +641,7 @@ static int suhosin_hook_s_read(void **mod_data, const char *key, char **val, int
 regenerate:
 		SDEBUG("regenerating key is %s", key);
 		KEY = SESSION_G(id) = SESSION_G(mod)->s_create_sid(&SESSION_G(mod_data), NULL TSRMLS_CC);
-		suhosin_send_cookie(TSRMLS_C);
+		suhosin_send_cookie();
 	} else if (strlen(key) > SUHOSIN_G(session_max_id_length)) {
 		suhosin_log(S_SESSION, "session id ('%s') exceeds maximum length - regenerating", KEY);
 		if (!SUHOSIN_G(simulation)) {
@@ -866,18 +864,6 @@ void suhosin_hook_session(TSRMLS_D)
                 serializer->encode = suhosin_session_encode;
         }
 #endif
-
-        /* increase session identifier entropy */
-        if (SESSION_G(entropy_length) == 0 || SESSION_G(entropy_file) == NULL) {
-                
-                /* ensure that /dev/urandom exists */
-                int fd = VCWD_OPEN("/dev/urandom", O_RDONLY);
-                if (fd >= 0) {
-                        close(fd);
-                        SESSION_G(entropy_length) = 16;
-                        SESSION_G(entropy_file) = pestrdup("/dev/urandom", 1);
-                }
-        }
 }
 
 void suhosin_unhook_session(TSRMLS_D)

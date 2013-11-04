@@ -1,8 +1,3 @@
-2010-03-28 - 0.9.31
-
-    - Fix ZTS build of session.c
-    - Increased session identifier entropy by using /dev/urandom if available
-
 2010-03-25 - 0.9.30
 
     - Added line ending characters %0a and %0d to the list of dangerous characters handled
