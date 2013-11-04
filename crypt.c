@@ -17,7 +17,7 @@
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: crypt.c,v 1.2 2008-01-04 11:23:47 sesser Exp $ 
+  $Id: crypt.c,v 1.1.1.1 2007-11-28 01:15:35 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -64,12 +64,10 @@ extern char *crypt(char *__key, char *__salt);
 static MUTEX_T suhosin_crypt_mutex;
 #endif
 
-static int CRYPT_MD5 = 0;
-
 char *suhosin_crypt_blowfish_rn(char *key, char *setting, char *output, int size);
 char *suhosin_crypt_gensalt_blowfish_rn(unsigned long count, char *input, int size, char *output, int output_size);
 
-static unsigned char itoa64[] = "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+/*static unsigned char itoa64[] = "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
 static void php_to64(char *s, long v, int n)
 {
@@ -77,7 +75,7 @@ static void php_to64(char *s, long v, int n)
 		*s++ = itoa64[v&0x3f]; 		
 		v >>= 6;
 	} 
-}
+}*/
 
 /* {{{ proto string crypt(string str [, string salt])
    Encrypt a string */
@@ -102,18 +100,17 @@ static PHP_FUNCTION(suhosin_crypt)
 	}
 
 	/* The automatic salt generation only covers standard DES and md5-crypt */
+/*	DO NOT TRY TO ENFORCE A BLOWFISH SALT THIS COULD BREAK SCRIPTS
 	if(!*salt) {
-		if (CRYPT_MD5) {
-			strcpy(salt, "$1$");
-			php_to64(&salt[3], PHP_CRYPT_RAND, 4);
-			php_to64(&salt[7], PHP_CRYPT_RAND, 4);
-			strcpy(&salt[11], "$");
-		} else {
-			php_to64(&salt[0], PHP_CRYPT_RAND, 2);
-			salt[2] = '\0';
-		}
+		char randat[16];
+		int i;
+		
+		for (i=0; i<16; i++) randat[i] = PHP_CRYPT_RAND;
+		
+		suhosin_crypt_gensalt_blowfish_rn(5, randat, sizeof(randat), salt, sizeof(salt));
 	}
-
+*/
+	
 	if (salt[0] == '$' &&
 	    salt[1] == '2' &&
 	    salt[2] == 'a' &&
@@ -155,13 +152,6 @@ void suhosin_hook_crypt()
 	zend_constant *c;
 	TSRMLS_FETCH();
 	
-	/* check if we have MD5 support */
-	if (zend_hash_find(EG(zend_constants), "CRYPT_MD5", sizeof("CRYPT_MD5"), (void **) &c) == SUCCESS) {
-		if (c->value.type == IS_LONG && c->value.value.lval > 0) {
-			CRYPT_MD5 = 1;
-		}
-	}
-
 	/* check if we already have blowfish support */
 	if (zend_hash_find(EG(zend_constants), "CRYPT_BLOWFISH", sizeof("CRYPT_BLOWFISH"), (void **) &c) == FAILURE) {
 		
@@ -185,7 +175,7 @@ void suhosin_hook_crypt()
 		c->value.value.lval = BLOWFISH_SALT_LEN;
 	}
 #ifdef ZTS
-	suhosin_crypt_mutex = tsrm_mutex_alloc();
+    suhosin_crypt_mutex = tsrm_mutex_alloc();
 #endif    
 	
 	/* replace the crypt() function */
