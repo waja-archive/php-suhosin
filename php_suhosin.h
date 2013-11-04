@@ -3,7 +3,7 @@
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
   | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007-2010 SektionEins GmbH                             |
+  | Copyright (c) 2007 SektionEins GmbH                                  |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -22,7 +22,7 @@
 #ifndef PHP_SUHOSIN_H
 #define PHP_SUHOSIN_H
 
-#define SUHOSIN_EXT_VERSION  "0.9.30"
+#define SUHOSIN_EXT_VERSION  "0.9.29"
 
 /*#define SUHOSIN_DEBUG*/
 #define SUHOSIN_LOG "/tmp/suhosin_log.txt"
