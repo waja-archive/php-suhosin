@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: session.c,v 1.15 2006-11-22 09:57:26 sesser Exp $ 
+  $Id: session.c,v 1.14 2006-10-26 16:28:36 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -317,15 +317,17 @@ char *suhosin_decrypt_string(char *str, int padded_len, char *var, int vlen, cha
 	}
         
     decrypted = php_base64_decode((unsigned char *)str, padded_len, &len);
-	if (decrypted == NULL || len < 2*16 || (len % 16) != 0) {
+	if (decrypted == NULL || len < 2*16) {
 error_out:
 		if (decrypted != NULL) {
 			efree(decrypted);
 		}
+		decrypted = emalloc(1);
+		decrypted[0] = 0;
 		if (orig_len) {
 			*orig_len = 0;
 		}
-		return NULL;
+		return (char *)decrypted;
 	}
         
     for (i=len-16, tmp=decrypted+i; i>=0; i-=16, tmp-=16) {
@@ -497,10 +499,6 @@ regenerate:
 		v = *val;
 		i = *vallen;
 		*val = suhosin_decrypt_string(v, i, "", 0, (char *)&cryptkey, vallen, SUHOSIN_G(session_checkraddr) TSRMLS_CC);
-        if (*val == NULL) {
-            *val = estrndup("", 0);
-            *vallen = 0;
-        }
 		efree(v);
 	}
 	
