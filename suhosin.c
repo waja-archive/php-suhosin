@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: suhosin.c,v 1.45 2007-05-15 08:08:23 sesser Exp $ */
+/* $Id: suhosin.c,v 1.41 2007-03-04 10:22:54 sesser Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -254,128 +254,9 @@ static int suhosin_startup_wrapper(zend_extension *ext)
 
 /*static zend_extension_version_info extension_version_info = { ZEND_EXTENSION_API_NO, ZEND_VERSION, ZTS_V, ZEND_DEBUG };*/
 
-#define PERDIR_CHECK(upper, lower) \
-    if (!SUHOSIN_G(lower ## _perdir) && stage == ZEND_INI_STAGE_ACTIVATE) { \
-        return FAILURE; \
-    } 
-
-#define LOG_PERDIR_CHECK() PERDIR_CHECK(LOG, log)
-#define EXEC_PERDIR_CHECK() PERDIR_CHECK(EXEC, exec)
-#define MISC_PERDIR_CHECK() PERDIR_CHECK(MISC, misc)
-#define GET_PERDIR_CHECK() PERDIR_CHECK(GET, get)
-#define POST_PERDIR_CHECK() PERDIR_CHECK(POST, post)
-#define COOKIE_PERDIR_CHECK() PERDIR_CHECK(COOKIE, cookie)
-#define REQUEST_PERDIR_CHECK() PERDIR_CHECK(REQUEST, request)
-#define UPLOAD_PERDIR_CHECK() PERDIR_CHECK(UPLOAD, upload)
-#define SQL_PERDIR_CHECK() PERDIR_CHECK(SQL, sql)
-
-#define ZEND_INI_MH_PASSTHRU entry, new_value, new_value_length, mh_arg1, mh_arg2, mh_arg3, stage TSRMLS_CC
-
-static ZEND_INI_MH(OnUpdateSuhosin_perdir)
-{
-        char *tmp;
-
-	LOG_PERDIR_CHECK()
-	if (SUHOSIN_G(perdir)) {
-    		pefree(SUHOSIN_G(perdir), 1);
-	}
-	SUHOSIN_G(perdir) = NULL;
-    
-        /* Initialize the perdir flags */
-        SUHOSIN_G(log_perdir) = 0;
-        SUHOSIN_G(exec_perdir) = 0;
-        SUHOSIN_G(get_perdir) = 0;
-        SUHOSIN_G(cookie_perdir) = 0;
-        SUHOSIN_G(post_perdir) = 0;
-        SUHOSIN_G(request_perdir) = 0;
-        SUHOSIN_G(sql_perdir) = 0;
-        SUHOSIN_G(upload_perdir) = 0;
-        SUHOSIN_G(misc_perdir) = 0;
-    
-	if (new_value == NULL) {
-		return SUCCESS;
-	}
-	
-        tmp = SUHOSIN_G(perdir) = pestrdup(new_value,1);
-        
-        /* trim the whitespace */
-        while (isspace(*tmp)) tmp++;
-        
-        /* should we deactivate perdir completely? */
-        if (*tmp == 0 || *tmp == '0') {
-            return SUCCESS;
-        }
-        
-        /* no deactivation so check the flags */
-        while (*tmp) {
-            switch (*tmp) {
-                case 'l':
-                case 'L':
-                    SUHOSIN_G(log_perdir) = 1;
-                    break;
-                case 'e':
-                case 'E':
-                    SUHOSIN_G(exec_perdir) = 1;
-                    break;
-                case 'g':
-                case 'G':
-                    SUHOSIN_G(get_perdir) = 1;
-                    break;
-                case 'c':
-                case 'C':
-                    SUHOSIN_G(cookie_perdir) = 1;
-                    break;
-                case 'p':
-                case 'P':
-                    SUHOSIN_G(post_perdir) = 1;
-                    break;
-                case 'r':
-                case 'R':
-                    SUHOSIN_G(request_perdir) = 1;
-                    break;
-                case 's':
-                case 'S':
-                    SUHOSIN_G(sql_perdir) = 1;
-                    break;
-                case 'u':
-                case 'U':
-                    SUHOSIN_G(upload_perdir) = 1;
-                    break;
-                case 'm':
-                case 'M':
-                    SUHOSIN_G(misc_perdir) = 1;
-                    break;
-            }
-            tmp++;
-        }        
-	return SUCCESS;
-}
-
-#define dohandler(handler, name, upper, lower) \
-    static ZEND_INI_MH(OnUpdate ## name ## handler) \
-    { \
-        PERDIR_CHECK(upper, lower) \
-        return OnUpdate ## handler (ZEND_INI_MH_PASSTHRU); \
-    } \
-
-#define dohandlers(name, upper, lower) \
-    dohandler(Bool, name, upper, lower) \
-    dohandler(String, name, upper, lower) \
-    dohandler(Long, name, upper, lower) \
-
-dohandlers(Log, LOG, log)
-dohandlers(Exec, EXEC, exec)
-dohandlers(Misc, MISC, misc)
-dohandlers(Get, GET, get)
-dohandlers(Post, POST, post)
-dohandlers(Cookie, COOKIE, cookie)
-dohandlers(Request, REQUEST, request)
-dohandlers(Upload, UPLOAD, upload)
-dohandlers(SQL, SQL, sql)
 
 static ZEND_INI_MH(OnUpdateSuhosin_log_syslog)
 {
-    LOG_PERDIR_CHECK()
 	if (!new_value) {
 		SUHOSIN_G(log_syslog) = (S_ALL & ~S_SQL) | S_MEMORY;
 	} else {
@@ -385,7 +266,6 @@ static ZEND_INI_MH(OnUpdateSuhosin_log_syslog)
 }
 static ZEND_INI_MH(OnUpdateSuhosin_log_syslog_facility)
 {
-    LOG_PERDIR_CHECK()
 	if (!new_value) {
 		SUHOSIN_G(log_syslog_facility) = LOG_USER;
 	} else {
@@ -395,7 +275,6 @@ static ZEND_INI_MH(OnUpdateSuhosin_log_syslog_facility)
 }
 static ZEND_INI_MH(OnUpdateSuhosin_log_syslog_priority)
 {
-    LOG_PERDIR_CHECK()
 	if (!new_value) {
 		SUHOSIN_G(log_syslog_priority) = LOG_ALERT;
 	} else {
@@ -405,7 +284,8 @@ static ZEND_INI_MH(OnUpdateSuhosin_log_syslog_priority)
 }
 static ZEND_INI_MH(OnUpdateSuhosin_log_sapi)
 {
-    LOG_PERDIR_CHECK()
+	SDEBUG("(OnUpdateSuhosin_log_sapi) new_value: %s - stage: %u", new_value, stage);
+
 	if (!new_value) {
 		SUHOSIN_G(log_sapi) = (S_ALL & ~S_SQL);
 	} else {
@@ -415,7 +295,6 @@ static ZEND_INI_MH(OnUpdateSuhosin_log_sapi)
 }
 static ZEND_INI_MH(OnUpdateSuhosin_log_script)
 {
-    LOG_PERDIR_CHECK()
 	if (!new_value) {
 		SUHOSIN_G(log_script) = S_ALL & ~S_MEMORY;
 	} else {
@@ -425,11 +304,10 @@ static ZEND_INI_MH(OnUpdateSuhosin_log_script)
 }
 static ZEND_INI_MH(OnUpdateSuhosin_log_scriptname)
 {
-    LOG_PERDIR_CHECK()
 	if (SUHOSIN_G(log_scriptname)) {
 		pefree(SUHOSIN_G(log_scriptname),1);
 	}
-    SUHOSIN_G(log_scriptname) = NULL;
+        SUHOSIN_G(log_scriptname) = NULL;
 	if (new_value) {
 		SUHOSIN_G(log_scriptname) = pestrdup(new_value,1);
 	}
@@ -437,7 +315,6 @@ static ZEND_INI_MH(OnUpdateSuhosin_log_scriptname)
 }
 static ZEND_INI_MH(OnUpdateSuhosin_log_phpscript)
 {
-    LOG_PERDIR_CHECK()
 	if (!new_value) {
 		SUHOSIN_G(log_phpscript) = S_ALL & ~S_MEMORY;
 	} else {
@@ -447,7 +324,6 @@ static ZEND_INI_MH(OnUpdateSuhosin_log_phpscript)
 }
 static ZEND_INI_MH(OnUpdateSuhosin_log_file)
 {
-    LOG_PERDIR_CHECK()
 	if (!new_value) {
 		SUHOSIN_G(log_file) = S_ALL & ~S_MEMORY;
 	} else {
@@ -512,42 +388,36 @@ list_destroy:
 
 static ZEND_INI_MH(OnUpdate_include_blacklist)
 {
-    EXEC_PERDIR_CHECK()
 	parse_list(&SUHOSIN_G(include_blacklist), new_value, 1);
 	return SUCCESS;
 }
 
 static ZEND_INI_MH(OnUpdate_include_whitelist)
 {
-    EXEC_PERDIR_CHECK()
 	parse_list(&SUHOSIN_G(include_whitelist), new_value, 1);
 	return SUCCESS;
 }
 
 static ZEND_INI_MH(OnUpdate_func_blacklist)
 {
-    EXEC_PERDIR_CHECK()
 	parse_list(&SUHOSIN_G(func_blacklist), new_value, 1);
 	return SUCCESS;
 }
 
 static ZEND_INI_MH(OnUpdate_func_whitelist)
 {
-    EXEC_PERDIR_CHECK()
 	parse_list(&SUHOSIN_G(func_whitelist), new_value, 1);
 	return SUCCESS;
 }
 
 static ZEND_INI_MH(OnUpdate_eval_blacklist)
 {
-    EXEC_PERDIR_CHECK()
 	parse_list(&SUHOSIN_G(eval_blacklist), new_value, 1);
 	return SUCCESS;
 }
 
 static ZEND_INI_MH(OnUpdate_eval_whitelist)
 {
-    EXEC_PERDIR_CHECK()
 	parse_list(&SUHOSIN_G(eval_whitelist), new_value, 1);
 	return SUCCESS;
 }
@@ -841,93 +711,87 @@ static zend_ini_entry shared_ini_entries[] = {
 	ZEND_INI_ENTRY("suhosin.log.sapi",				"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateSuhosin_log_sapi)
 	ZEND_INI_ENTRY("suhosin.log.script",			"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateSuhosin_log_script)
 	ZEND_INI_ENTRY("suhosin.log.script.name",			NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateSuhosin_log_scriptname)
-	STD_ZEND_INI_BOOLEAN("suhosin.log.use-x-forwarded-for",	"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateLogBool, log_use_x_forwarded_for,	zend_suhosin_globals,	suhosin_globals)
+	STD_ZEND_INI_BOOLEAN("suhosin.log.use-x-forwarded-for",	"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, log_use_x_forwarded_for,	zend_suhosin_globals,	suhosin_globals)
 	ZEND_INI_ENTRY("suhosin.log.phpscript",			"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateSuhosin_log_phpscript)
-	STD_ZEND_INI_ENTRY("suhosin.log.phpscript.name",			NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateLogString, log_phpscriptname, zend_suhosin_globals, suhosin_globals)
+	STD_ZEND_INI_ENTRY("suhosin.log.phpscript.name",			NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateString, log_phpscriptname, zend_suhosin_globals, suhosin_globals)
 	ZEND_INI_ENTRY("suhosin.log.file",			"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateSuhosin_log_file)
-	STD_ZEND_INI_ENTRY("suhosin.log.file.name",		NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateLogString, log_filename, zend_suhosin_globals, suhosin_globals)
-	STD_ZEND_INI_BOOLEAN("suhosin.log.phpscript.is_safe",			"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateLogBool, log_phpscript_is_safe,	zend_suhosin_globals,	suhosin_globals)
-	ZEND_INI_ENTRY("suhosin.perdir",		"0",		ZEND_INI_SYSTEM,	OnUpdateSuhosin_perdir)
+	STD_ZEND_INI_ENTRY("suhosin.log.file.name",		NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateString, log_filename, zend_suhosin_globals, suhosin_globals)
+	STD_ZEND_INI_BOOLEAN("suhosin.log.phpscript.is_safe",			"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, log_phpscript_is_safe,	zend_suhosin_globals,	suhosin_globals)
 ZEND_INI_END()
  
 PHP_INI_BEGIN()
-	STD_ZEND_INI_ENTRY("suhosin.executor.include.max_traversal",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateExecLong, executor_include_max_traversal,	zend_suhosin_globals,	suhosin_globals)
+
+	STD_ZEND_INI_ENTRY("suhosin.executor.include.max_traversal",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateLong, executor_include_max_traversal,	zend_suhosin_globals,	suhosin_globals)
 	ZEND_INI_ENTRY("suhosin.executor.include.whitelist",	NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdate_include_whitelist)
 	ZEND_INI_ENTRY("suhosin.executor.include.blacklist",	NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdate_include_blacklist)
 	ZEND_INI_ENTRY("suhosin.executor.eval.whitelist",	NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdate_eval_whitelist)
 	ZEND_INI_ENTRY("suhosin.executor.eval.blacklist",	NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdate_eval_blacklist)
 	ZEND_INI_ENTRY("suhosin.executor.func.whitelist",	NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdate_func_whitelist)
 	ZEND_INI_ENTRY("suhosin.executor.func.blacklist",	NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdate_func_blacklist)
-	STD_ZEND_INI_BOOLEAN("suhosin.executor.disable_eval",	"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateExecBool, executor_disable_eval,	zend_suhosin_globals,	suhosin_globals)
-	STD_ZEND_INI_BOOLEAN("suhosin.executor.disable_emodifier",	"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateExecBool, executor_disable_emod,	zend_suhosin_globals,	suhosin_globals)
+	STD_ZEND_INI_BOOLEAN("suhosin.executor.disable_eval",	"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, executor_disable_eval,	zend_suhosin_globals,	suhosin_globals)
+	STD_ZEND_INI_BOOLEAN("suhosin.executor.disable_emodifier",	"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, executor_disable_emod,	zend_suhosin_globals,	suhosin_globals)
 
-	STD_ZEND_INI_BOOLEAN("suhosin.executor.allow_symlink",	"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateExecBool, executor_allow_symlink,	zend_suhosin_globals,	suhosin_globals)
-	STD_ZEND_INI_ENTRY("suhosin.executor.max_depth",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateExecLong, max_execution_depth,	zend_suhosin_globals,	suhosin_globals)
-
+	STD_ZEND_INI_BOOLEAN("suhosin.executor.allow_symlink",	"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, executor_allow_symlink,	zend_suhosin_globals,	suhosin_globals)
+	STD_ZEND_INI_ENTRY("suhosin.executor.max_depth",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateLong, max_execution_depth,	zend_suhosin_globals,	suhosin_globals)
+	STD_ZEND_INI_BOOLEAN("suhosin.sql.bailout_on_error",	"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, sql_bailout_on_error,	zend_suhosin_globals,	suhosin_globals)
+	STD_ZEND_INI_BOOLEAN("suhosin.multiheader",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, allow_multiheader,	zend_suhosin_globals,	suhosin_globals)
 	
-	STD_ZEND_INI_BOOLEAN("suhosin.multiheader",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateMiscBool, allow_multiheader,	zend_suhosin_globals,	suhosin_globals)
-	STD_ZEND_INI_ENTRY("suhosin.mail.protect",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateMiscLong, mailprotect,	zend_suhosin_globals,	suhosin_globals)
-	STD_ZEND_INI_ENTRY("suhosin.memory_limit",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateMiscLong, memory_limit,	zend_suhosin_globals,	suhosin_globals)
-	STD_ZEND_INI_BOOLEAN("suhosin.simulation",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateMiscBool, simulation,	zend_suhosin_globals,	suhosin_globals)
-      STD_PHP_INI_ENTRY("suhosin.filter.action", NULL, PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateMiscString, filter_action, zend_suhosin_globals, suhosin_globals)
-
+	STD_ZEND_INI_BOOLEAN("suhosin.simulation",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, simulation,	zend_suhosin_globals,	suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.protectkey",		"1",		ZEND_INI_SYSTEM,	OnUpdateBool, protectkey,	zend_suhosin_globals,	suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.coredump",		"0",		ZEND_INI_SYSTEM,	OnUpdateBool, coredump,	zend_suhosin_globals,	suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.stealth",		"1",		ZEND_INI_SYSTEM,	OnUpdateBool, stealth,	zend_suhosin_globals,	suhosin_globals)
+    
 	STD_ZEND_INI_BOOLEAN("suhosin.apc_bug_workaround",		"0",		ZEND_INI_SYSTEM,	OnUpdateBool, apc_bug_workaround,	zend_suhosin_globals,	suhosin_globals)
 	
+	STD_ZEND_INI_ENTRY("suhosin.mail.protect",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateLong, mailprotect,	zend_suhosin_globals,	suhosin_globals)
+	STD_ZEND_INI_ENTRY("suhosin.memory_limit",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateLong, memory_limit,	zend_suhosin_globals,	suhosin_globals)
 	
 
-        STD_PHP_INI_ENTRY("suhosin.request.max_vars", "200", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateRequestLong, max_request_variables, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.request.max_varname_length", "64", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateRequestLong, max_varname_length, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.request.max_value_length", "65000", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateRequestLong, max_value_length, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.request.max_array_depth", "50", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateRequestLong, max_array_depth, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.request.max_totalname_length", "256", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateRequestLong, max_totalname_length, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.request.max_array_index_length", "64", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateRequestLong, max_array_index_length, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.request.disallow_nul", "1", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateRequestBool, disallow_nul, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.request.disallow_ws", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateRequestBool, disallow_ws, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.request.max_vars", "200", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_request_variables, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.request.max_varname_length", "64", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_varname_length, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.request.max_value_length", "65000", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_value_length, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.request.max_array_depth", "100", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_array_depth, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.request.max_totalname_length", "256", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_totalname_length, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.request.max_array_index_length", "64", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_array_index_length, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.request.disallow_nul", "1", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateBool, disallow_nul, zend_suhosin_globals, suhosin_globals)
     
-        STD_PHP_INI_ENTRY("suhosin.cookie.max_vars", "100", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateCookieLong, max_cookie_vars, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.cookie.max_name_length", "64", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateCookieLong, max_cookie_name_length, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.cookie.max_totalname_length", "256", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateCookieLong, max_cookie_totalname_length, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.cookie.max_value_length", "10000", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateCookieLong, max_cookie_value_length, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.cookie.max_array_depth", "50", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateCookieLong, max_cookie_array_depth, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.cookie.max_array_index_length", "64", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateCookieLong, max_cookie_array_index_length, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.cookie.disallow_nul", "1", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateCookieBool, disallow_cookie_nul, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.cookie.disallow_ws", "1", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateCookieBool, disallow_cookie_ws, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.cookie.max_vars", "100", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_cookie_vars, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.cookie.max_name_length", "64", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_cookie_name_length, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.cookie.max_totalname_length", "256", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_cookie_totalname_length, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.cookie.max_value_length", "10000", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_cookie_value_length, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.cookie.max_array_depth", "100", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_cookie_array_depth, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.cookie.max_array_index_length", "64", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_cookie_array_index_length, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.cookie.disallow_nul", "1", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateBool, disallow_cookie_nul, zend_suhosin_globals, suhosin_globals)
 
-        STD_PHP_INI_ENTRY("suhosin.get.max_vars", "100", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateGetLong, max_get_vars, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.get.max_name_length", "64", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateGetLong, max_get_name_length, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.get.max_totalname_length", "256", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateGetLong, max_get_totalname_length, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.get.max_value_length", "512", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateGetLong, max_get_value_length, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.get.max_array_depth", "50", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateGetLong, max_get_array_depth, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.get.max_array_index_length", "64", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateGetLong, max_get_array_index_length, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.get.disallow_nul", "1", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateGetBool, disallow_get_nul, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.get.disallow_ws", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateGetBool, disallow_get_ws, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.get.max_vars", "100", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_get_vars, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.get.max_name_length", "64", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_get_name_length, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.get.max_totalname_length", "256", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_get_totalname_length, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.get.max_value_length", "512", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_get_value_length, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.get.max_array_depth", "50", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_get_array_depth, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.get.max_array_index_length", "64", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_get_array_index_length, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.get.disallow_nul", "1", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateBool, disallow_get_nul, zend_suhosin_globals, suhosin_globals)
 
-        STD_PHP_INI_ENTRY("suhosin.post.max_vars", "200", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdatePostLong, max_post_vars, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.post.max_name_length", "64", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdatePostLong, max_post_name_length, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.post.max_totalname_length", "256", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdatePostLong, max_post_totalname_length, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.post.max_value_length", "65000", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdatePostLong, max_post_value_length, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.post.max_array_depth", "50", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdatePostLong, max_post_array_depth, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.post.max_array_index_length", "64", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdatePostLong, max_post_array_index_length, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.post.disallow_nul", "1", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdatePostBool, disallow_post_nul, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.post.disallow_ws", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdatePostBool, disallow_post_ws, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.post.max_vars", "200", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_post_vars, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.post.max_name_length", "64", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_post_name_length, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.post.max_totalname_length", "256", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_post_totalname_length, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.post.max_value_length", "65000", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_post_value_length, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.post.max_array_depth", "100", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_post_array_depth, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.post.max_array_index_length", "64", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, max_post_array_index_length, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.post.disallow_nul", "1", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateBool, disallow_post_nul, zend_suhosin_globals, suhosin_globals)
 
-        STD_PHP_INI_ENTRY("suhosin.upload.max_uploads", "25", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateUploadLong, upload_limit, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.upload.disallow_elf", "1", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateUploadBool, upload_disallow_elf, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.upload.disallow_binary", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateUploadBool, upload_disallow_binary, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.upload.remove_binary", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateUploadBool, upload_remove_binary, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.upload.verification_script", NULL, PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateUploadString, upload_verification_script, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.upload.max_uploads", "25", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, upload_limit, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.upload.disallow_elf", "1", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateBool, upload_disallow_elf, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.upload.disallow_binary", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateBool, upload_disallow_binary, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.upload.remove_binary", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateBool, upload_remove_binary, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.upload.verification_script", NULL, PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateString, upload_verification_script, zend_suhosin_globals, suhosin_globals)
 
-
-        STD_ZEND_INI_BOOLEAN("suhosin.sql.bailout_on_error",	"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateSQLBool, sql_bailout_on_error,	zend_suhosin_globals,	suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.sql.user_prefix", NULL, PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateSQLString, sql_user_prefix, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.sql.user_postfix", NULL, PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateSQLString, sql_user_postfix, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.sql.comment", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateSQLLong, sql_comment, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.sql.opencomment", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateSQLLong, sql_opencomment, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.sql.multiselect", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateSQLLong, sql_mselect, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.sql.union", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateSQLLong, sql_union, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.filter.action", NULL, PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateString, filter_action, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.sql.user_prefix", NULL, PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateString, sql_user_prefix, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.sql.user_postfix", NULL, PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateString, sql_user_postfix, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.sql.comment", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, sql_comment, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.sql.opencomment", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, sql_opencomment, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.sql.multiselect", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, sql_mselect, zend_suhosin_globals, suhosin_globals)
+        STD_PHP_INI_ENTRY("suhosin.sql.union", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, sql_union, zend_suhosin_globals, suhosin_globals)
     
 	STD_ZEND_INI_BOOLEAN("suhosin.session.encrypt",		"1",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, session_encrypt,	zend_suhosin_globals,	suhosin_globals)
 	STD_PHP_INI_ENTRY("suhosin.session.cryptkey", "", PHP_INI_ALL, OnUpdateString, session_cryptkey, zend_suhosin_globals, suhosin_globals)
@@ -1020,7 +884,7 @@ PHP_MINIT_FUNCTION(suhosin)
 			i->mh_arg1 = p->mh_arg1;
 			i->mh_arg2 = p->mh_arg2;
 			i->mh_arg3 = p->mh_arg3;
-			i->on_modify(i, i->value, i->value_length, i->mh_arg1, i->mh_arg2, i->mh_arg3, ZEND_INI_STAGE_STARTUP TSRMLS_CC);
+			i->on_modify(i, i->value, i->value_length, i->mh_arg1, i->mh_arg2, i->mh_arg3, ZEND_INI_STAGE_ACTIVATE TSRMLS_CC);
 			p++;
 		}
 	} else {

@@ -1,25 +1,3 @@
-2007-05-19 - 0.9.20
-
-    - Added protection flags against whitespace at variable start
-    - Added mutex around crypt() to close the PHP crypt() 
-      thread safety vulnerability class
-    - Improved HTTP Response Splitting Protection
-    - Changed default maximum array depth to 50 for GPCR
-    - Fixed possible endless loop in file logging
-    - Fixed file locking in file logging
-
-2007-05-01 - 0.9.19
-
-    - Fixed typo in HTTP header protection (only during simulation mode)
-      Reported by: Ilia Alshanetsky
-    - Fixed wrong \0 termination in cookie decryptor
-    - Fixed possible crash in SERVER variables protection when SAPI=embedded
-      Fix provided by: Olivier Blin/Mandriva Linux
-    - Added possibility to en-/disable INI_PERDIR
-      Problem reported by: Ilia Alshanetsky
-    - Added PHP Warning when disabled function is called
-    - Added examples for new configuration option in suhosin.ini
-
 2007-03-06 - 0.9.18
 
     - Fixed session double hooking in edge case

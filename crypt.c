@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: crypt.c,v 1.3 2007-05-19 21:31:56 sesser Exp $ 
+  $Id: crypt.c,v 1.2 2006-08-24 22:40:16 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -58,10 +58,6 @@ extern char *crypt(char *__key, char *__salt);
 #define PHP_CRYPT_RAND php_rand(TSRMLS_C)
 
 #define BLOWFISH_SALT_LEN 60
-
-#ifdef ZTS
-static MUTEX_T suhosin_crypt_mutex;
-#endif
 
 char *suhosin_crypt_blowfish_rn(char *key, char *setting, char *output, int size);
 char *suhosin_crypt_gensalt_blowfish_rn(unsigned long count, char *input, int size, char *output, int output_size);
@@ -123,13 +119,7 @@ static PHP_FUNCTION(suhosin_crypt)
 		RETVAL_STRING(output, 1);
 	    
 	} else {
-#ifdef ZTS
-        tsrm_mutex_lock(suhosin_crypt_mutex);
-#endif
 		RETVAL_STRING(crypt(str, salt), 1);
-#ifdef ZTS
-        tsrm_mutex_unlock(suhosin_crypt_mutex);
-#endif
 	}
 }
 /* }}} */
@@ -171,9 +161,6 @@ void suhosin_hook_crypt()
 		c->value.type = IS_LONG;
 		c->value.value.lval = BLOWFISH_SALT_LEN;
 	}
-#ifdef ZTS
-    suhosin_crypt_mutex = tsrm_mutex_alloc();
-#endif    
 	
 	/* replace the crypt() function */
 	zend_hash_del(CG(function_table), "crypt", sizeof("crypt"));

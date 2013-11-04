@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: session.c,v 1.17 2007-04-12 09:28:47 sesser Exp $ 
+  $Id: session.c,v 1.16 2007-03-06 10:43:52 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -386,8 +386,8 @@ error_out:
 		*orig_len = o_len;
 	}
 	
-	memmove(decrypted, decrypted+16, o_len);
-	decrypted[o_len] = 0;
+	memmove(decrypted, decrypted+16, len-16);
+	decrypted[len-16] = 0;
 	/* we do not realloc() here because 16 byte less 
 	   is simply not worth the overhead */	
 	return (char *)decrypted;
