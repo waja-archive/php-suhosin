@@ -16,12 +16,12 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: php_suhosin.h,v 1.50 2006-11-28 19:36:36 sesser Exp $ */
+/* $Id: php_suhosin.h,v 1.49 2006-11-22 09:57:26 sesser Exp $ */
 
 #ifndef PHP_SUHOSIN_H
 #define PHP_SUHOSIN_H
 
-#define SUHOSIN_EXT_VERSION  "0.9.15"
+#define SUHOSIN_EXT_VERSION  "0.9.14"
 
 /*#define SUHOSIN_DEBUG*/
 #define SUHOSIN_LOG "/tmp/suhosin_log.txt"
@@ -77,7 +77,6 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	zend_bool	abort_request;
 	long executor_include_max_traversal;
 	
-
 
 	HashTable *include_whitelist;
 	HashTable *include_blacklist;
@@ -169,14 +168,13 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 /*  sqlprotect */
 	zend_bool sql_bailout_on_error;
 
-	int (*old_php_body_write)(const char *str, unsigned int str_length TSRMLS_DC);
 
 /*	session */
 	void	*s_module;
 	int 	(*old_s_read)(void **mod_data, const char *key, char **val, int *vallen TSRMLS_DC);
 	int	(*old_s_write)(void **mod_data, const char *key, const char *val, const int vallen TSRMLS_DC);
 	int	(*old_s_destroy)(void **mod_data, const char *key TSRMLS_DC);
-
+	
 	BYTE fi[24],ri[24];
         WORD fkey[120];
         WORD rkey[120];

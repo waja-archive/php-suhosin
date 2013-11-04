@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: execute.c,v 1.36 2006-11-28 19:36:36 sesser Exp $ */
+/* $Id: execute.c,v 1.35 2006-11-14 14:39:48 sesser Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -819,55 +819,10 @@ int ih_fixusername(IH_HANDLER_PARAMS)
 	return (0);
 }
 
-static int suhosin_php_body_write(const char *str, uint str_length TSRMLS_DC)
-{
-#define P_META_ROBOTS "<meta name=\"ROBOTS\" content=\"NOINDEX,NOFOLLOW,NOARCHIVE\" />"
-#define S_META_ROBOTS "<meta name=\"ROBOTS\" content=\"NOINDEX,FOLLOW,NOARCHIVE\" />"
-
-    SDEBUG("bw: %s", str);
-
-	if ((str_length == sizeof("</head>\n")-1) && (strcmp(str, "</head>\n")==0)) {
-		SUHOSIN_G(old_php_body_write)(S_META_ROBOTS, sizeof(S_META_ROBOTS)-1 TSRMLS_CC);
-		OG(php_body_write) = SUHOSIN_G(old_php_body_write);
-		return SUHOSIN_G(old_php_body_write)(str, str_length TSRMLS_CC);
-	} else if ((str_length == sizeof(P_META_ROBOTS)-1) && (strcmp(str, P_META_ROBOTS)==0)) {
-		return str_length;
-	}
-	return SUHOSIN_G(old_php_body_write)(str, str_length TSRMLS_CC);	
-}
-
-static int ih_phpinfo(IH_HANDLER_PARAMS)
-{
-    int argc = ZEND_NUM_ARGS();
-	long flag;
-
-	if (zend_parse_parameters(argc TSRMLS_CC, "|l", &flag) == FAILURE) {
-		return;
-	}
-
-	if(!argc) {
-		flag = PHP_INFO_ALL;
-	}
-
-	/* Andale!  Andale!  Yee-Hah! */
-	php_start_ob_buffer(NULL, 4096, 0 TSRMLS_CC);
-	if (!sapi_module.phpinfo_as_text) {
-		SUHOSIN_G(old_php_body_write) = OG(php_body_write);
-		OG(php_body_write) = suhosin_php_body_write;
-	}
-	php_print_info(flag TSRMLS_CC);
-	php_end_ob_buffer(1, 0 TSRMLS_CC);
-
-	RETVAL_TRUE;
-	return (1);
-}
-
-
 internal_function_handler ihandlers[] = {
     { "preg_replace", ih_preg_replace, NULL, NULL, NULL },
     { "mail", ih_mail, NULL, NULL, NULL },
     { "symlink", ih_symlink, NULL, NULL, NULL },
-    { "phpinfo", ih_phpinfo, NULL, NULL, NULL },
 	
     { "ocilogon", ih_fixusername, (void *)1, NULL, NULL },
     { "ociplogon", ih_fixusername, (void *)1, NULL, NULL },
