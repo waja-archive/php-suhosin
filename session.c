@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: session.c,v 1.16 2007-03-06 10:43:52 sesser Exp $ 
+  $Id: session.c,v 1.15 2006-11-22 09:57:26 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -467,7 +467,7 @@ static int suhosin_hook_s_read(void **mod_data, const char *key, char **val, int
 	}*/
 	
 	/* protect dumb session handlers */
-	if (key == NULL || !key[0] || *mod_data == NULL) {
+	if (key == NULL || !key[0]) {
 regenerate:
 		SDEBUG("regenerating key is %s", key);
 		KEY = SESSION_G(id) = SESSION_G(mod)->s_create_sid(&SESSION_G(mod_data), NULL TSRMLS_CC);
@@ -514,7 +514,7 @@ static int suhosin_hook_s_write(void **mod_data, const char *key, const char *va
 	char *v = (char *)val;
 
 	/* protect dumb session handlers */
-	if (key == NULL || !key[0] || val == NULL || strlen(key) > SUHOSIN_G(session_max_id_length) || *mod_data == NULL) {
+	if (key == NULL || !key[0] || val == NULL || strlen(key) > SUHOSIN_G(session_max_id_length)) {
 		r = FAILURE;
 		goto return_write;
 	}
@@ -553,7 +553,7 @@ static int suhosin_hook_s_destroy(void **mod_data, const char *key TSRMLS_DC)
 	int r;
 
 	/* protect dumb session handlers */
-	if (key == NULL || !key[0] || strlen(key) > SUHOSIN_G(session_max_id_length) || *mod_data == NULL) {
+	if (key == NULL || !key[0] || strlen(key) > SUHOSIN_G(session_max_id_length)) {
 		return FAILURE;
 	}
 	
@@ -566,7 +566,7 @@ static void suhosin_hook_session_module(TSRMLS_D)
 {
 	ps_module *old_mod = SESSION_G(mod), *mod;
 
-	if (old_mod == NULL || SUHOSIN_G(s_module) == old_mod) {
+	if (old_mod == NULL) {
 		return;
 	}
 	if (SUHOSIN_G(s_module) == NULL) {
@@ -577,12 +577,11 @@ static void suhosin_hook_session_module(TSRMLS_D)
 	}
 	mod = SUHOSIN_G(s_module);
 	memcpy(mod, old_mod, sizeof(ps_module));
-	
 	SUHOSIN_G(old_s_read) = mod->s_read;
-	mod->s_read = suhosin_hook_s_read;
 	SUHOSIN_G(old_s_write) = mod->s_write;
-	mod->s_write = suhosin_hook_s_write;
 	SUHOSIN_G(old_s_destroy) = mod->s_destroy;
+	mod->s_read = suhosin_hook_s_read;
+	mod->s_write = suhosin_hook_s_write;
 	mod->s_destroy = suhosin_hook_s_destroy;
 	
 	SESSION_G(mod) = mod;
