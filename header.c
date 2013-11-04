@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: header.c,v 1.8 2006-10-25 21:38:00 sesser Exp $ 
+  $Id: header.c,v 1.6 2006-08-26 19:56:20 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -33,121 +33,13 @@
 
 static int (*orig_header_handler)(sapi_header_struct *sapi_header, sapi_headers_struct *sapi_headers TSRMLS_DC) = NULL;
 
-char *suhosin_encrypt_single_cookie(char *name, int name_len, char *value, int value_len, char *key TSRMLS_DC)
-{
-	char buffer[4096];
-    char buffer2[4096];
-	char *buf = buffer, *buf2 = buffer2, *d, *d_url;
-    int l;
-
-	if (strlen(name) > sizeof(buffer)-2) {
-		buf = estrndup(name, name_len);
-	} else {
-		memcpy(buf, name, name_len);
-		buf[name_len] = 0;
-	}
-	
-	name_len = php_url_decode(name, name_len);
-	
-	if (SUHOSIN_G(cookie_plainlist)) {
-		if (zend_hash_exists(SUHOSIN_G(cookie_plainlist), buf, name_len+1)) {
-encrypt_return_plain:
-			if (buf != buffer) {
-				efree(buf);
-			}
-			return estrndup(value, value_len);
-		}
-	} else if (SUHOSIN_G(cookie_cryptlist)) {
-		if (!zend_hash_exists(SUHOSIN_G(cookie_cryptlist), buf, name_len+1)) {
-			goto encrypt_return_plain;
-		}
-	}
-	
-	if (strlen(value) <= sizeof(buffer2)-2) {
-		memcpy(buf2, value, value_len);
-		buf2[value_len] = 0;
-	} else {
-		buf2 = estrndup(value, value_len);
-	}
-	
-	value_len = php_url_decode(buf2, value_len);
-	
-	d = suhosin_encrypt_string(buf2, value_len, buf, name_len, key TSRMLS_CC);
-	d_url = php_url_encode(d, strlen(d), &l);
-	efree(d);
-    if (buf != buffer) {
-		efree(buf);
-	}
-    if (buf2 != buffer2) {
-		efree(buf2);
-	}
-	return d_url;
-}
-
-char *suhosin_decrypt_single_cookie(char *name, int name_len, char *value, int value_len, char *key, char **where TSRMLS_DC)
-{
-	char buffer[4096];
-    char buffer2[4096];
-	char *buf = buffer, *buf2 = buffer2, *d, *d_url;
-	int l;
-
-	if (strlen(name) > sizeof(buffer)-2) {
-		buf = estrndup(name, name_len);
-	} else {
-		memcpy(buf, name, name_len);
-		buf[name_len] = 0;
-	}
-	
-	name_len = php_url_decode(name, name_len);
-	
-	if (SUHOSIN_G(cookie_plainlist)) {
-		if (zend_hash_exists(SUHOSIN_G(cookie_plainlist), buf, name_len+1)) {
-decrypt_return_plain:
-			if (buf != buffer) {
-				efree(buf);
-			}
-	        memcpy(*where, value, value_len);
-	        *where += value_len;
-			return *where;
-		}
-	} else if (SUHOSIN_G(cookie_cryptlist)) {
-		if (!zend_hash_exists(SUHOSIN_G(cookie_cryptlist), buf, name_len+1)) {
-			goto decrypt_return_plain;
-		}
-	}
-	
-	
-	if (strlen(value) <= sizeof(buffer2)-2) {
-		memcpy(buf2, value, value_len);
-		buf2[value_len] = 0;
-	} else {
-		buf2 = estrndup(value, value_len);
-	}
-	
-	value_len = php_url_decode(buf2, value_len);
-	
-	d = suhosin_decrypt_string(buf2, value_len, buf, name_len, key, &l, SUHOSIN_G(cookie_checkraddr) TSRMLS_CC);
-	d_url = php_url_encode(d, l, &l);
-	efree(d);
-	if (buf != buffer) {
-		efree(buf);
-	}
-	if (buf2 != buffer2) {
-		efree(buf2);
-	}
-	memcpy(*where, d_url, l);
-	*where += l;
-	efree(d_url);
-	return *where;
-}
-
 /* {{{ suhosin_cookie_decryptor
  */
 char *suhosin_cookie_decryptor(TSRMLS_D)
 {
 	char *raw_cookie = SG(request_info).cookie_data;
-	char *decrypted, *ret, *var, *val, *tmp;
-	int j;
+	char *decrypted, *var, *val, *tmp, *d;
+	int j, l;
 	char cryptkey[33];
 
 	/*
@@ -158,48 +50,56 @@ char *suhosin_cookie_decryptor(TSRMLS_D)
 
 	suhosin_generate_key(SUHOSIN_G(cookie_cryptkey), SUHOSIN_G(cookie_cryptua), SUHOSIN_G(cookie_cryptdocroot), SUHOSIN_G(cookie_cryptraddr), (char *)&cryptkey TSRMLS_CC);
 
-	ret = decrypted = emalloc(strlen(raw_cookie)*3+1);
-	raw_cookie = estrdup(raw_cookie);
-    SUHOSIN_G(raw_cookie) = estrdup(raw_cookie);
-
+	decrypted = emalloc(strlen(raw_cookie)*3+1);
 	
 	j = 0; tmp = raw_cookie;
 	while (*tmp) {
-		char *d_url;int varlen;
+		int vlen; char old;char *d_url;int varlen;
 		while (*tmp == '\t' || *tmp == ' ') tmp++;
 		var = tmp;
 		while (*tmp && *tmp != ';' && *tmp != '=') tmp++;
 		
 		varlen = tmp-var;
-		memcpy(decrypted, var, varlen);
-		decrypted += varlen;
+		memcpy(decrypted + j, var, varlen);
+		
+		j += varlen;
 		if (*tmp == 0) break;
 		
 		if (*tmp++ == ';') {
-			*decrypted++ = ';';
+			decrypted[j++] = ';';
 			continue;
 		}
 		
-		*decrypted++ = '=';
+		decrypted[j++] = '=';
 		
 		val = tmp;
 		while (*tmp && *tmp != ';') tmp++;
 
-		d_url = suhosin_decrypt_single_cookie(var, varlen, val, tmp-val, (char *)&cryptkey, &decrypted TSRMLS_CC);
-		if (*tmp == ';') {
-			*decrypted++ = ';';
+		old = *tmp;
+		vlen = php_url_decode(val, tmp-val);
+		*tmp = old;
+
+		d = suhosin_decrypt_string(val, vlen, var, varlen, (char *)&cryptkey, &l TSRMLS_CC);
+		d_url = php_url_encode(d, l, &l);
+		efree(d);
+		
+		memcpy(decrypted + j, d_url, l);
+		j += l;
+		if (old == ';') {
+			decrypted[j++] = ';';
 		}
 		
+		efree(d_url);
+
 		if (*tmp == 0) break;
 		tmp++;
 	}
-	*decrypted++ = 0;
-	ret = erealloc(ret, decrypted-ret);
+	decrypted[j] = 0;
+	decrypted = erealloc(decrypted, j+1);
 	
-	SUHOSIN_G(decrypted_cookie) = ret;
-	efree(raw_cookie);
+	SUHOSIN_G(decrypted_cookie) = decrypted;
 		
-	return ret;
+	return decrypted;
 }
 /* }}} */
 
@@ -276,9 +176,19 @@ int suhosin_header_handler(sapi_header_struct *sapi_header, sapi_headers_struct 
                 }
                 vlen = end-value;
                 
-                value = suhosin_encrypt_single_cookie(name, nlen, value, vlen, (char *)&cryptkey TSRMLS_CC); 
-                vlen = strlen(value);
+                /* decode the name & value */
+                nlen = php_url_decode(name, nlen);
+                vlen = php_url_decode(value, vlen);
 		
+		if (end != rend) {
+			*end = ';';
+		}
+                
+                value = suhosin_encrypt_string(value, vlen, name, nlen, (char *)&cryptkey TSRMLS_CC); vlen = strlen(value);
+                
+                name = php_url_encode(name, nlen, &nlen);
+                value = php_url_encode(value, vlen, &vlen);
+                
                 len = sizeof("Set-Cookie: ")-1 + nlen + 1 + vlen + rend-end;
                 tmp = emalloc(len + 1);
                 tlen = sprintf(tmp, "Set-Cookie: %s=%s", name, value);
@@ -286,6 +196,7 @@ int suhosin_header_handler(sapi_header_struct *sapi_header, sapi_headers_struct 
                 tmp[len] = 0;
 
                 efree(sapi_header->header);
+                efree(name);
                 efree(value);
                 efree(start);
                 

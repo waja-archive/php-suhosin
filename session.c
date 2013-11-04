@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: session.c,v 1.14 2006-10-26 16:28:36 sesser Exp $ 
+  $Id: session.c,v 1.11 2006-09-29 10:32:35 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -197,29 +197,6 @@ static php_ps_globals_43_44 *session_globals = NULL;
 #define SESSION_G(v) (session_globals->v)
 #endif
 
-void suhosin_get_ipv4(char *buf TSRMLS_DC)
-{
-	char *raddr = sapi_getenv("REMOTE_ADDR", sizeof("REMOTE_ADDR")-1 TSRMLS_CC);
-	int i;
-
-
-	if (raddr == NULL) {
-		memset(buf, 4, 0);
-		return;
-	}
-	
-	for (i=0; i<4; i++) {
-		if (raddr[0] == 0) {
-			buf[i] = 0;
-		} else {
-			buf[i] = strtol(raddr, &raddr, 10);
-			if (raddr[0] == '.') {
-				raddr++;
-			}
-		}
-	}
-}
-
 char *suhosin_encrypt_string(char *str, int len, char *var, int vlen, char *key TSRMLS_DC)
 {
     int padded_len, i, slen;
@@ -252,10 +229,6 @@ char *suhosin_encrypt_string(char *str, int len, char *var, int vlen, char *key 
 		check += check << 1;
 		check ^= (unsigned char)str[i];
 	}
-	
-	/* store ip value */
-	suhosin_get_ipv4(crypted+4 TSRMLS_CC);
-	
 	/* store check value */
 	crypted[8] = check & 0xff;
 	crypted[9] = (check >> 8) & 0xff;
@@ -289,12 +262,11 @@ char *suhosin_encrypt_string(char *str, int len, char *var, int vlen, char *key 
     return (char *)tmp;
 }
 
-char *suhosin_decrypt_string(char *str, int padded_len, char *var, int vlen, char *key, int *orig_len, int check_ra TSRMLS_DC)
+char *suhosin_decrypt_string(char *str, int padded_len, char *var, int vlen, char *key, int *orig_len TSRMLS_DC)
 {
     int len, i, o_len, invalid = 0;
     unsigned char *decrypted, *tmp;
 	unsigned int check = 0x13579BDF;
-    char buf[4];
         
     if (str == NULL) {
         return NULL;
@@ -368,17 +340,6 @@ error_out:
 	           (decrypted[9] != ((check >> 8) & 0xff)) || 
 			   (decrypted[10] != ((check >> 16) & 0xff)) ||	
 			   (decrypted[11] != ((check >> 24) & 0xff));
-	
-	/* check IP */
-	if (check_ra > 0) {
-		if (check_ra > 4) {
-			check_ra = 4;
-		}
-		suhosin_get_ipv4(&buf TSRMLS_CC);
-		if (memcmp(buf, decrypted+4, check_ra) != 0) {
-			goto error_out;
-		}
-	}
 	
 	if (invalid) {
 		goto error_out;
@@ -498,7 +459,7 @@ regenerate:
 	
 		v = *val;
 		i = *vallen;
-		*val = suhosin_decrypt_string(v, i, "", 0, (char *)&cryptkey, vallen, SUHOSIN_G(session_checkraddr) TSRMLS_CC);
+		*val = suhosin_decrypt_string(v, i, "", 0, (char *)&cryptkey, vallen TSRMLS_CC);
 		efree(v);
 	}
 	

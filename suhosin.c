@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: suhosin.c,v 1.30 2006-10-25 21:38:00 sesser Exp $ */
+/* $Id: suhosin.c,v 1.28 2006-10-08 10:00:31 sesser Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -33,8 +33,6 @@
 #include "SAPI.h"
 #include "php_logos.h"
 #include "suhosin_logo.h"
-#include "ext/standard/php_string.h"
-#include "ext/standard/url.h"
 
 ZEND_DECLARE_MODULE_GLOBALS(suhosin)
 
@@ -53,7 +51,7 @@ STATIC zend_extension suhosin_zend_extension_entry = {
 	"Suhosin",
 	SUHOSIN_EXT_VERSION,
 	"Hardened-PHP Project",
-	"http://www.suhosin.org",
+	"http://suhosin.hardened-php.net",
 	"(C) Copyright 2006",
 	
 	suhosin_module_startup,
@@ -229,42 +227,37 @@ static ZEND_INI_MH(OnUpdateSuhosin_log_phpscript)
 	return SUCCESS;
 }
 
-static void parse_list(HashTable **ht, char *list, zend_bool lc)
+static ZEND_INI_MH(OnUpdate_include_whitelist)
 {
 	char *s = NULL, *e, *val;
 	unsigned long dummy = 1;
-	
-	if (list == NULL) {
-list_destroy:
-		if (*ht) {
-			zend_hash_destroy(*ht);
-			pefree(*ht, 1);
+
+	if (!new_value) {
+include_whitelist_destroy:
+		if (SUHOSIN_G(include_whitelist)) {
+			zend_hash_destroy(SUHOSIN_G(include_whitelist));
+			pefree(SUHOSIN_G(include_whitelist),1);
 		}
-		*ht = NULL;
-		return;
+		SUHOSIN_G(include_whitelist) = NULL;
+		return SUCCESS;
 	}
-	while (*list == ' ' || *list == '\t') list++;
-	if (*list == 0) {
-		goto list_destroy;
+	if (!(*new_value)) {
+		goto include_whitelist_destroy;
 	}
 	
-	*ht = pemalloc(sizeof(HashTable), 1);
-	zend_hash_init(*ht, 5, NULL, NULL, 1);
+	SUHOSIN_G(include_whitelist) = pemalloc(sizeof(HashTable), 1);
+	zend_hash_init(SUHOSIN_G(include_whitelist), 5, NULL, NULL, 1);
 	
-	if (lc) {
-        val = suhosin_str_tolower_dup(list, strlen(list));
-    } else {
-        val = estrndup(list, strlen(list));
-    }
+	val = suhosin_str_tolower_dup(new_value, strlen(new_value));
 	e = val;
-	
+
 	while (*e) {
 		switch (*e) {
 			case ' ':
 			case ',':
 				if (s) {
 					*e = '\0';
-					zend_hash_add(*ht, s, e-s+1, &dummy, sizeof(unsigned long), NULL);
+					zend_hash_add(SUHOSIN_G(include_whitelist), s, e-s+1, &dummy, sizeof(unsigned long), NULL);
 					s = NULL;
 				}
 				break;
@@ -277,294 +270,269 @@ list_destroy:
 		e++;
 	}
 	if (s) {
-		zend_hash_add(*ht, s, e-s+1, &dummy, sizeof(unsigned long), NULL);
+		zend_hash_add(SUHOSIN_G(include_whitelist), s, e-s+1, &dummy, sizeof(unsigned long), NULL);
 	}
 	efree(val);
-
+	
+	return SUCCESS;
 }
 
 static ZEND_INI_MH(OnUpdate_include_blacklist)
 {
-	parse_list(&SUHOSIN_G(include_blacklist), new_value, 1);
-	return SUCCESS;
-}
+	char *s = NULL, *e, *val;
+	unsigned long dummy = 1;
 
-static ZEND_INI_MH(OnUpdate_include_whitelist)
-{
-	parse_list(&SUHOSIN_G(include_whitelist), new_value, 1);
-	return SUCCESS;
-}
+	if (!new_value) {
+include_blacklist_destroy:
+		if (SUHOSIN_G(include_blacklist)) {
+			zend_hash_destroy(SUHOSIN_G(include_blacklist));
+			pefree(SUHOSIN_G(include_blacklist),1);
+		}
+		SUHOSIN_G(include_blacklist) = NULL;
+		return SUCCESS;
+	}
+	if (!(*new_value)) {
+		goto include_blacklist_destroy;
+	}
+	
+	SUHOSIN_G(include_blacklist) = pemalloc(sizeof(HashTable), 1);
+	zend_hash_init(SUHOSIN_G(include_blacklist), 5, NULL, NULL, 1);
+	
+	val = suhosin_str_tolower_dup(new_value, strlen(new_value));
+	e = val;
 
-static ZEND_INI_MH(OnUpdate_func_blacklist)
-{
-	parse_list(&SUHOSIN_G(func_blacklist), new_value, 1);
-	return SUCCESS;
-}
-
-static ZEND_INI_MH(OnUpdate_func_whitelist)
-{
-	parse_list(&SUHOSIN_G(func_whitelist), new_value, 1);
-	return SUCCESS;
-}
-
-static ZEND_INI_MH(OnUpdate_eval_blacklist)
-{
-	parse_list(&SUHOSIN_G(eval_blacklist), new_value, 1);
+	while (*e) {
+		switch (*e) {
+			case ' ':
+			case ',':
+				if (s) {
+					*e = '\0';
+					zend_hash_add(SUHOSIN_G(include_blacklist), s, e-s+1, &dummy, sizeof(unsigned long), NULL);
+					s = NULL;
+				}
+				break;
+			default:
+				if (!s) {
+					s = e;
+				}
+				break;
+		}
+		e++;
+	}
+	if (s) {
+		zend_hash_add(SUHOSIN_G(include_blacklist), s, e-s+1, &dummy, sizeof(unsigned long), NULL);
+	}
+	efree(val);
+	
 	return SUCCESS;
 }
 
 static ZEND_INI_MH(OnUpdate_eval_whitelist)
 {
-	parse_list(&SUHOSIN_G(eval_whitelist), new_value, 1);
+	char *s = NULL, *e, *val;
+	unsigned long dummy = 1;
+
+	if (!new_value) {
+eval_whitelist_destroy:
+		if (SUHOSIN_G(eval_whitelist)) {
+			zend_hash_destroy(SUHOSIN_G(eval_whitelist));
+			pefree(SUHOSIN_G(eval_whitelist),1);
+		}
+		SUHOSIN_G(eval_whitelist) = NULL;
+		return SUCCESS;
+	}
+	if (!(*new_value)) {
+		goto eval_whitelist_destroy;
+	}
+	
+	SUHOSIN_G(eval_whitelist) = pemalloc(sizeof(HashTable), 1);
+	zend_hash_init(SUHOSIN_G(eval_whitelist), 5, NULL, NULL, 1);
+	
+	val = suhosin_str_tolower_dup(new_value, strlen(new_value));
+	e = val;
+
+	while (*e) {
+		switch (*e) {
+			case ' ':
+			case ',':
+				if (s) {
+					*e = '\0';
+					zend_hash_add(SUHOSIN_G(eval_whitelist), s, e-s+1, &dummy, sizeof(unsigned long), NULL);
+					s = NULL;
+				}
+				break;
+			default:
+				if (!s) {
+					s = e;
+				}
+				break;
+		}
+		e++;
+	}
+	if (s) {
+		zend_hash_add(SUHOSIN_G(eval_whitelist), s, e-s+1, &dummy, sizeof(unsigned long), NULL);
+	}
+	efree(val);
+	
 	return SUCCESS;
 }
 
-
-static ZEND_INI_MH(OnUpdate_cookie_cryptlist)
+static ZEND_INI_MH(OnUpdate_eval_blacklist)
 {
-	parse_list(&SUHOSIN_G(cookie_cryptlist), new_value, 0);
+	char *s = NULL, *e, *val;
+	unsigned long dummy = 1;
+
+	if (!new_value) {
+eval_blacklist_destroy:
+		if (SUHOSIN_G(eval_blacklist)) {
+			zend_hash_destroy(SUHOSIN_G(eval_blacklist));
+			pefree(SUHOSIN_G(eval_blacklist), 1);
+		}
+		SUHOSIN_G(eval_blacklist) = NULL;
+		return SUCCESS;
+	}
+	if (!(*new_value)) {
+		goto eval_blacklist_destroy;
+	}
+	
+	SUHOSIN_G(eval_blacklist) = pemalloc(sizeof(HashTable), 1);
+	zend_hash_init(SUHOSIN_G(eval_blacklist), 5, NULL, NULL, 1);
+	
+	val = suhosin_str_tolower_dup(new_value, strlen(new_value));
+	e = val;
+
+	while (*e) {
+		switch (*e) {
+			case ' ':
+			case ',':
+				if (s) {
+					*e = '\0';
+					zend_hash_add(SUHOSIN_G(eval_blacklist), s, e-s+1, &dummy, sizeof(unsigned long), NULL);
+					s = NULL;
+				}
+				break;
+			default:
+				if (!s) {
+					s = e;
+				}
+				break;
+		}
+		e++;
+	}
+	if (s) {
+		zend_hash_add(SUHOSIN_G(eval_blacklist), s, e-s+1, &dummy, sizeof(unsigned long), NULL);
+	}
+	efree(val);
+	
+	
 	return SUCCESS;
 }
 
-static ZEND_INI_MH(OnUpdate_cookie_plainlist)
+static ZEND_INI_MH(OnUpdate_func_whitelist)
 {
-	parse_list(&SUHOSIN_G(cookie_plainlist), new_value, 0);
+	char *s = NULL, *e, *val;
+	unsigned long dummy = 1;
+
+	if (!new_value) {
+func_whitelist_destroy:
+		if (SUHOSIN_G(func_whitelist)) {
+			zend_hash_destroy(SUHOSIN_G(func_whitelist));
+			pefree(SUHOSIN_G(func_whitelist),1);
+		}
+		SUHOSIN_G(func_whitelist) = NULL;
+		return SUCCESS;
+	}
+	if (!(*new_value)) {
+		goto func_whitelist_destroy;
+	}
+	
+	SUHOSIN_G(func_whitelist) = pemalloc(sizeof(HashTable), 1);
+	zend_hash_init(SUHOSIN_G(func_whitelist), 5, NULL, NULL, 1);
+	
+	val = suhosin_str_tolower_dup(new_value, strlen(new_value));
+	e = val;
+
+	while (*e) {
+		switch (*e) {
+			case ' ':
+			case ',':
+				if (s) {
+					*e = '\0';
+					zend_hash_add(SUHOSIN_G(func_whitelist), s, e-s+1, &dummy, sizeof(unsigned long), NULL);
+					s = NULL;
+				}
+				break;
+			default:
+				if (!s) {
+					s = e;
+				}
+				break;
+		}
+		e++;
+	}
+	if (s) {
+		zend_hash_add(SUHOSIN_G(func_whitelist), s, e-s+1, &dummy, sizeof(unsigned long), NULL);
+	}
+	efree(val);
+	
 	return SUCCESS;
 }
 
-/* {{{ proto void suhosin_register_cookie_variable(char *var, zval *val, zval *track_vars_array TSRMLS_DC)
-   Registers a cookie in the RAW cookie array */
-static void suhosin_register_cookie_variable(char *var, zval *val, zval *track_vars_array TSRMLS_DC)
+static ZEND_INI_MH(OnUpdate_func_blacklist)
 {
-	char *p = NULL;
-	char *ip;		/* index pointer */
-	char *index, *escaped_index = NULL;
-	int var_len, index_len;
-	zval *gpc_element, **gpc_element_p;
-	zend_bool is_array = 0;
-	HashTable *symtable1 = NULL;
+	char *s = NULL, *e, *val;
+	unsigned long dummy = 1;
 
-	assert(var != NULL);
-	
-	symtable1 = Z_ARRVAL_P(track_vars_array);
-
-	/*
-	 * Prepare variable name
-	 */
-
-	/* ignore leading spaces in the variable name */
-	while (*var && *var==' ') {
-		var++;
-	}
-
-	/* ensure that we don't have spaces or dots in the variable name (not binary safe) */
-	for (p = var; *p; p++) {
-		if (*p == ' ' || *p == '.') {
-			*p='_';
-		} else if (*p == '[') {
-			is_array = 1;
-			ip = p;
-			*p = 0;
-			break;
+	if (!new_value) {
+func_blacklist_destroy:
+		if (SUHOSIN_G(func_blacklist)) {
+			zend_hash_destroy(SUHOSIN_G(func_blacklist));
+			pefree(SUHOSIN_G(func_blacklist),1);
 		}
+		SUHOSIN_G(func_blacklist) = NULL;
+		return SUCCESS;
 	}
-	var_len = p - var;
-
-	if (var_len==0) { /* empty variable name, or variable name with a space in it */
-		zval_dtor(val);
-		return;
+	if (!(*new_value)) {
+		goto func_blacklist_destroy;
 	}
+	
+	SUHOSIN_G(func_blacklist) = pemalloc(sizeof(HashTable), 1);
+	zend_hash_init(SUHOSIN_G(func_blacklist), 5, NULL, NULL, 1);
+	
+	val = suhosin_str_tolower_dup(new_value, strlen(new_value));
+	e = val;
 
-	index = var;
-	index_len = var_len;
-
-	if (is_array) {
-		while (1) {
-			char *index_s;
-			int new_idx_len = 0;
-
-			ip++;
-			index_s = ip;
-			if (isspace(*ip)) {
-				ip++;
-			}
-			if (*ip==']') {
-				index_s = NULL;
-			} else {
-				ip = strchr(ip, ']');
-				if (!ip) {
-					/* PHP variables cannot contain '[' in their names, so we replace the character with a '_' */
-					*(index_s - 1) = '_';
-
-					index_len = var_len = 0;
-					if (index) {
-						index_len = var_len = strlen(index);
-					}
-					goto plain_var;
-					return;
+	while (*e) {
+		switch (*e) {
+			case ' ':
+			case ',':
+				if (s) {
+					*e = '\0';
+					zend_hash_add(SUHOSIN_G(func_blacklist), s, e-s+1, &dummy, sizeof(unsigned long), NULL);
+					s = NULL;
 				}
-				*ip = 0;
-				new_idx_len = strlen(index_s);	
-			}
-
-			if (!index) {
-				MAKE_STD_ZVAL(gpc_element);
-				array_init(gpc_element);
-				zend_hash_next_index_insert(symtable1, &gpc_element, sizeof(zval *), (void **) &gpc_element_p);
-			} else {
-				if (PG(magic_quotes_gpc) && (index != var)) {
-					/* no need to addslashes() the index if it's the main variable name */
-					escaped_index = php_addslashes(index, index_len, &index_len, 0 TSRMLS_CC);
-				} else {
-					escaped_index = index;
+				break;
+			default:
+				if (!s) {
+					s = e;
 				}
-				if (zend_symtable_find(symtable1, escaped_index, index_len + 1, (void **) &gpc_element_p) == FAILURE
-					|| Z_TYPE_PP(gpc_element_p) != IS_ARRAY) {
-					MAKE_STD_ZVAL(gpc_element);
-					array_init(gpc_element);
-					zend_symtable_update(symtable1, escaped_index, index_len + 1, &gpc_element, sizeof(zval *), (void **) &gpc_element_p);
-				}
-				if (index != escaped_index) {
-					efree(escaped_index);
-				}
-			}
-			symtable1 = Z_ARRVAL_PP(gpc_element_p);
-			/* ip pointed to the '[' character, now obtain the key */
-			index = index_s;
-			index_len = new_idx_len;
-
-			ip++;
-			if (*ip == '[') {
-				is_array = 1;
-				*ip = 0;
-			} else {
-				goto plain_var;
-			}
+				break;
 		}
-	} else {
-plain_var:
-		MAKE_STD_ZVAL(gpc_element);
-		gpc_element->value = val->value;
-		Z_TYPE_P(gpc_element) = Z_TYPE_P(val);
-		if (!index) {
-			zend_hash_next_index_insert(symtable1, &gpc_element, sizeof(zval *), (void **) &gpc_element_p);
-		} else {
-			if (PG(magic_quotes_gpc)) { 
-				escaped_index = php_addslashes(index, index_len, &index_len, 0 TSRMLS_CC);
-			} else {
-				escaped_index = index;
-			}
-			/* 
-			 * According to rfc2965, more specific paths are listed above the less specific ones.
-			 * If we encounter a duplicate cookie name, we should skip it, since it is not possible
-			 * to have the same (plain text) cookie name for the same path and we should not overwrite
-			 * more specific cookies with the less specific ones.
-			 */
-            if (zend_symtable_exists(symtable1, escaped_index, index_len + 1)) {
-				zval_ptr_dtor(&gpc_element);
-			} else {
-				zend_symtable_update(symtable1, escaped_index, index_len + 1, &gpc_element, sizeof(zval *), (void **) &gpc_element_p);
-			}
-			if (escaped_index != index) {
-				efree(escaped_index);
-			}
-		}
+		e++;
 	}
+	if (s) {
+		zend_hash_add(SUHOSIN_G(func_blacklist), s, e-s+1, &dummy, sizeof(unsigned long), NULL);
+	}
+	efree(val);
+	
+	
+	return SUCCESS;
 }
-/* }}} */
-
-static void suhosin_register_cookie_variable_safe(char *var, char *strval, int str_len, zval *track_vars_array TSRMLS_DC)
-{
-	zval new_entry;
-	assert(strval != NULL);
-	
-	/* Prepare value */
-	Z_STRLEN(new_entry) = str_len;
-	if (PG(magic_quotes_gpc)) {
-		Z_STRVAL(new_entry) = php_addslashes(strval, Z_STRLEN(new_entry), &Z_STRLEN(new_entry), 0 TSRMLS_CC);
-	} else {
-		Z_STRVAL(new_entry) = estrndup(strval, Z_STRLEN(new_entry));
-	}
-	Z_TYPE(new_entry) = IS_STRING;
-
-	suhosin_register_cookie_variable(var, &new_entry, track_vars_array TSRMLS_CC);
-}
-
-
-/* {{{ proto string suhosin_encrypt_cookie(string name, string value)
-   Encrypts a cookie value according to current cookie encrpytion setting */
-static PHP_FUNCTION(suhosin_encrypt_cookie)
-{
-	char *name, *value;
-	int name_len, value_len;
-	char cryptkey[33];
-	
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ss", &name, &name_len, &value, &value_len) == FAILURE) {
-		return;
-	}
-	
-	if (!SUHOSIN_G(cookie_encrypt)) {
-return_plain:
-		RETURN_STRINGL(value, value_len, 1);
-	}
-	
-	if (SUHOSIN_G(cookie_plainlist)) {
-		if (zend_hash_exists(SUHOSIN_G(cookie_plainlist), name, name_len+1)) {
-			goto return_plain;
-		}
-	} else if (SUHOSIN_G(cookie_cryptlist)) {
-		if (!zend_hash_exists(SUHOSIN_G(cookie_cryptlist), name, name_len+1)) {
-			goto return_plain;
-		}
-	}
-	
-	suhosin_generate_key(SUHOSIN_G(cookie_cryptkey), SUHOSIN_G(cookie_cryptua), SUHOSIN_G(cookie_cryptdocroot), SUHOSIN_G(cookie_cryptraddr), (char *)&cryptkey TSRMLS_CC);
-	value = suhosin_encrypt_string(value, value_len, name, name_len, (char *)&cryptkey TSRMLS_CC);
-	
-	RETVAL_STRING(value, 0);
-}
-/* }}} */
-
-/* {{{ proto mixed suhosin_get_raw_cookies()
-   Returns an array containing the raw cookie values */
-static PHP_FUNCTION(suhosin_get_raw_cookies)
-{
-	char *var, *val, *res = estrdup(SUHOSIN_G(raw_cookie));
-    zval *array_ptr = return_value;
-    char *strtok_buf = NULL;
-    int val_len;
-    
-	array_init(array_ptr);
-
-	var = php_strtok_r(res, ";", &strtok_buf);
-	
-	while (var) {
-		val = strchr(var, '=');
-		if (val) { /* have a value */
-			*val++ = '\0';
-			php_url_decode(var, strlen(var));
-			val_len = php_url_decode(val, strlen(val));
-			suhosin_register_cookie_variable_safe(var, val, val_len, array_ptr TSRMLS_CC);
-		} else {
-			php_url_decode(var, strlen(var));
-			val_len = 0;
-			val = "";
-			suhosin_register_cookie_variable_safe(var, "", 0, array_ptr TSRMLS_CC);
-		}
-		var = php_strtok_r(NULL, ";", &strtok_buf);
-	}
-	
-    efree(res);
-}
-/* }}} */
-
 
 
 /* {{{ suhosin_functions[]
  */
 zend_function_entry suhosin_functions[] = {
-	PHP_NAMED_FE(suhosin_encrypt_cookie, PHP_FN(suhosin_encrypt_cookie), NULL)
-	PHP_NAMED_FE(suhosin_get_raw_cookies, PHP_FN(suhosin_get_raw_cookies), NULL)
 	{NULL, NULL, NULL}	/* Must be the last line in suhosin_functions[] */
 };
 /* }}} */
@@ -680,7 +648,6 @@ PHP_INI_BEGIN()
 	STD_ZEND_INI_BOOLEAN("suhosin.session.cryptua",		"1",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, session_cryptua,	zend_suhosin_globals,	suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.session.cryptdocroot",		"1",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, session_cryptdocroot,	zend_suhosin_globals,	suhosin_globals)
 	STD_PHP_INI_ENTRY("suhosin.session.cryptraddr", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, session_cryptraddr, zend_suhosin_globals, suhosin_globals)	
-	STD_PHP_INI_ENTRY("suhosin.session.checkraddr", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, session_checkraddr, zend_suhosin_globals, suhosin_globals)	
 	STD_PHP_INI_ENTRY("suhosin.session.max_id_length", "128", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, session_max_id_length, zend_suhosin_globals, suhosin_globals)
 	
 
@@ -689,9 +656,6 @@ PHP_INI_BEGIN()
 	STD_ZEND_INI_BOOLEAN("suhosin.cookie.cryptua",		"1",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, cookie_cryptua,	zend_suhosin_globals,	suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.cookie.cryptdocroot",		"1",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, cookie_cryptdocroot,	zend_suhosin_globals,	suhosin_globals)
 	STD_PHP_INI_ENTRY("suhosin.cookie.cryptraddr", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, cookie_cryptraddr, zend_suhosin_globals, suhosin_globals)	
-	STD_PHP_INI_ENTRY("suhosin.cookie.checkraddr", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, cookie_checkraddr, zend_suhosin_globals, suhosin_globals)	
-	ZEND_INI_ENTRY("suhosin.cookie.cryptlist",	NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdate_cookie_cryptlist)
-	ZEND_INI_ENTRY("suhosin.cookie.plainlist",	NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdate_cookie_plainlist)
 
 PHP_INI_END()
 /* }}} */
@@ -856,10 +820,6 @@ PHP_RSHUTDOWN_FUNCTION(suhosin)
 	if (SUHOSIN_G(decrypted_cookie)) {
 		efree(SUHOSIN_G(decrypted_cookie));
 		SUHOSIN_G(decrypted_cookie)=NULL;
-	}
-    if (SUHOSIN_G(raw_cookie)) {
-		efree(SUHOSIN_G(raw_cookie));
-		SUHOSIN_G(raw_cookie)=NULL;
 	}
 	
 	return SUCCESS;

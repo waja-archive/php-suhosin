@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: execute.c,v 1.32 2006-10-21 11:38:23 sesser Exp $ */
+/* $Id: execute.c,v 1.31 2006-10-08 15:20:30 sesser Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -56,7 +56,7 @@ conts:
 	while (*h) {
 		n = (unsigned char *) needle;
 		if (toupper(*h++) == toupper(*n++)) {
-			for (t=h; *n; t++, n++) {
+			for (t=h; *t || *n; t++, n++) {
 				if (toupper(*t) != toupper(*n)) goto conts;
 			}
     		return ((char*)h-1);

@@ -16,12 +16,12 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: php_suhosin.h,v 1.40 2006-10-26 16:28:36 sesser Exp $ */
+/* $Id: php_suhosin.h,v 1.35 2006-10-08 15:20:30 sesser Exp $ */
 
 #ifndef PHP_SUHOSIN_H
 #define PHP_SUHOSIN_H
 
-#define SUHOSIN_EXT_VERSION  "0.9.10"
+#define SUHOSIN_EXT_VERSION  "0.9.8"
 
 /*#define SUHOSIN_DEBUG*/
 #define SUHOSIN_LOG "/tmp/suhosin_log.txt"
@@ -183,20 +183,15 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	zend_bool	session_cryptua;
 	zend_bool	session_cryptdocroot;
 	long		session_cryptraddr;
-	long		session_checkraddr;
 	
 	long	session_max_id_length;
 	
 	char*	decrypted_cookie;
-    char*	raw_cookie;
 	zend_bool	cookie_encrypt;
 	char*	cookie_cryptkey;
 	zend_bool	cookie_cryptua;
 	zend_bool	cookie_cryptdocroot;
 	long		cookie_cryptraddr;
-	long		cookie_checkraddr;
-	HashTable *cookie_plainlist;
-	HashTable *cookie_cryptlist;
 	
 	zend_bool	coredump;
 	zend_bool	apc_bug_workaround;
@@ -211,9 +206,6 @@ ZEND_END_MODULE_GLOBALS(suhosin)
 
 #ifndef ZEND_ENGINE_2
 #define OnUpdateLong OnUpdateInt
-#define zend_symtable_find zend_hash_find
-#define zend_symtable_update zend_hash_update
-#define zend_symtable_exists zend_hash_exists
 #endif
 
 
@@ -251,7 +243,7 @@ suhosin_str_tolower_dup(const char *source, unsigned int length)
 /* functions */
 PHP_SUHOSIN_API void suhosin_log(int loglevel, char *fmt, ...);
 char *suhosin_encrypt_string(char *str, int len, char *var, int vlen, char *key TSRMLS_DC);
-char *suhosin_decrypt_string(char *str, int padded_len, char *var, int vlen, char *key, int *orig_len, int check_ra TSRMLS_DC);
+char *suhosin_decrypt_string(char *str, int padded_len, char *var, int vlen, char *key, int *orig_len TSRMLS_DC);
 char *suhosin_generate_key(char *key, zend_bool ua, zend_bool dr, long raddr, char *cryptkey TSRMLS_DC);
 char *suhosin_cookie_decryptor(TSRMLS_D);
 void suhosin_hook_post_handlers(TSRMLS_D);
