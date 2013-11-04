@@ -16,12 +16,12 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: php_suhosin.h,v 1.58 2007-03-06 10:43:52 sesser Exp $ */
+/* $Id: php_suhosin.h,v 1.57 2007-03-04 18:03:08 sesser Exp $ */
 
 #ifndef PHP_SUHOSIN_H
 #define PHP_SUHOSIN_H
 
-#define SUHOSIN_EXT_VERSION  "0.9.18"
+#define SUHOSIN_EXT_VERSION  "0.9.17"
 
 /*#define SUHOSIN_DEBUG*/
 #define SUHOSIN_LOG "/tmp/suhosin_log.txt"
