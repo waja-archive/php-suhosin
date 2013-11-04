@@ -3,7 +3,7 @@
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
   | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007-2012 SektionEins GmbH                             |
+  | Copyright (c) 2007-2010 SektionEins GmbH                             |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -40,20 +40,28 @@ static int (*orig_header_handler)(sapi_header_struct *sapi_header, sapi_headers_
 
 char *suhosin_encrypt_single_cookie(char *name, int name_len, char *value, int value_len, char *key TSRMLS_DC)
 {
-	char *buf, *buf2, *d, *d_url;
-	int l;
+	char buffer[4096];
+    char buffer2[4096];
+	char *buf = buffer, *buf2 = buffer2, *d, *d_url;
+    int l;
 
-	buf = estrndup(name, name_len);
-	
+	if (name_len > sizeof(buffer)-2) {
+		buf = estrndup(name, name_len);
+	} else {
+		memcpy(buf, name, name_len);
+		buf[name_len] = 0;
+	}
 	
 	name_len = php_url_decode(buf, name_len);
-	normalize_varname(buf);
-	name_len = strlen(buf);
+    normalize_varname(buf);
+    name_len = strlen(buf);
 	
 	if (SUHOSIN_G(cookie_plainlist)) {
 		if (zend_hash_exists(SUHOSIN_G(cookie_plainlist), buf, name_len+1)) {
 encrypt_return_plain:
-			efree(buf);
+			if (buf != buffer) {
+				efree(buf);
+			}
 			return estrndup(value, value_len);
 		}
 	} else if (SUHOSIN_G(cookie_cryptlist)) {
@@ -62,34 +70,52 @@ encrypt_return_plain:
 		}
 	}
 	
-	buf2 = estrndup(value, value_len);
+	if (strlen(value) <= sizeof(buffer2)-2) {
+		memcpy(buf2, value, value_len);
+		buf2[value_len] = 0;
+	} else {
+		buf2 = estrndup(value, value_len);
+	}
 	
 	value_len = php_url_decode(buf2, value_len);
 	
 	d = suhosin_encrypt_string(buf2, value_len, buf, name_len, key TSRMLS_CC);
 	d_url = php_url_encode(d, strlen(d), &l);
 	efree(d);
-	efree(buf);
-	efree(buf2);
+    if (buf != buffer) {
+		efree(buf);
+	}
+    if (buf2 != buffer2) {
+		efree(buf2);
+	}
 	return d_url;
 }
 
 char *suhosin_decrypt_single_cookie(char *name, int name_len, char *value, int value_len, char *key, char **where TSRMLS_DC)
 {
+	char buffer[4096];
+    char buffer2[4096];
     int o_name_len = name_len;
-	char *buf, *buf2, *d, *d_url;
+	char *buf = buffer, *buf2 = buffer2, *d, *d_url;
 	int l;
 
-	buf = estrndup(name, name_len);
-		
+	if (name_len > sizeof(buffer)-2) {
+		buf = estrndup(name, name_len);
+	} else {
+		memcpy(buf, name, name_len);
+		buf[name_len] = 0;
+	}
+	
 	name_len = php_url_decode(buf, name_len);
-	normalize_varname(buf);
-	name_len = strlen(buf);
+    normalize_varname(buf);
+    name_len = strlen(buf);
 	
 	if (SUHOSIN_G(cookie_plainlist)) {
 		if (zend_hash_exists(SUHOSIN_G(cookie_plainlist), buf, name_len+1)) {
 decrypt_return_plain:
-			efree(buf);
+			if (buf != buffer) {
+				efree(buf);
+			}
             memcpy(*where, name, o_name_len);
             *where += o_name_len;
             **where = '='; *where +=1;
@@ -104,7 +130,12 @@ decrypt_return_plain:
 	}
 	
 	
-	buf2 = estrndup(value, value_len);
+	if (strlen(value) <= sizeof(buffer2)-2) {
+		memcpy(buf2, value, value_len);
+		buf2[value_len] = 0;
+	} else {
+		buf2 = estrndup(value, value_len);
+	}
 	
 	value_len = php_url_decode(buf2, value_len);
 	
@@ -121,8 +152,12 @@ decrypt_return_plain:
 	*where += l;
 	efree(d_url);
 skip_cookie:
-	efree(buf);
-	efree(buf2);
+	if (buf != buffer) {
+		efree(buf);
+	}
+	if (buf2 != buffer2) {
+		efree(buf2);
+	}
 	return *where;
 }
 
@@ -205,7 +240,7 @@ int suhosin_header_handler(sapi_header_struct *sapi_header, sapi_headers_struct 
 	}
 #endif
 	
-	if (sapi_header && sapi_header->header) {
+	if (!SUHOSIN_G(allow_multiheader) && sapi_header && sapi_header->header) {
 	
 		tmp = sapi_header->header;
 
@@ -221,9 +256,6 @@ int suhosin_header_handler(sapi_header_struct *sapi_header, sapi_headers_struct 
 				if (!SUHOSIN_G(simulation)) {
 					sapi_header->header_len = i;
 				}
-			}
-			if (SUHOSIN_G(allow_multiheader)) {
-				continue;
 			} else if ((tmp[0] == '\r' && (tmp[1] != '\n' || i == 0)) || 
 			   (tmp[0] == '\n' && (i == sapi_header->header_len-1 || i == 0 || (tmp[1] != ' ' && tmp[1] != '\t')))) {
 				char *fname = get_active_function_name(TSRMLS_C);
