@@ -23,14 +23,12 @@
 #include "config.h"
 #endif
 
-#include <fcntl.h>
 #include "php.h"
 #include "php_ini.h"
 #include "zend_hash.h"
 #include "zend_extensions.h"
 #include "ext/standard/info.h"
 #include "ext/standard/php_rand.h"
-#include "ext/standard/php_lcg.h"
 #include "php_suhosin.h"
 #include "zend_compile.h"
 #include "zend_llist.h"
@@ -1316,7 +1314,6 @@ static void suhosin_gen_entropy(php_uint32 *seedbuf TSRMLS_DC)
     unsigned long stack_value = (unsigned long)&code_value;
     unsigned long heap_value  = (unsigned long)SUHOSIN_G(r_state);
     suhosin_SHA256_CTX   context;
-    int fd;
     
     code_value ^= code_value >> 32;
     stack_value ^= stack_value >> 32;
@@ -1332,18 +1329,9 @@ static void suhosin_gen_entropy(php_uint32 *seedbuf TSRMLS_DC)
     seedbuf[4] = getpid();
 #endif
     seedbuf[5] = (php_uint32) 0x7fffffff * php_combined_lcg(TSRMLS_C);
-
-#ifndef PHP_WIN32
-    fd = VCWD_OPEN("/dev/urandom", O_RDONLY);
-    if (fd >= 0) {
-        /* ignore error case - if urandom doesn't give us any/enough random bytes */
-        read(fd, &seedbuf[6], 2 * sizeof(php_uint32));
-        close(fd);
-    }
-#endif
-
+    
     suhosin_SHA256Init(&context);
-	suhosin_SHA256Update(&context, (void *) seedbuf, sizeof(php_uint32) * 8);
+	suhosin_SHA256Update(&context, (void *) seedbuf, sizeof(php_uint32) * 6);
 	suhosin_SHA256Final(seedbuf, &context);
 }
 /* }}} */
