@@ -3,7 +3,7 @@
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
   | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007-2010 SektionEins GmbH                             |
+  | Copyright (c) 2007 SektionEins GmbH                                  |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -30,13 +30,7 @@
 #include "php_ini.h"
 #include "php_suhosin.h"
 #include "ext/standard/base64.h"
-#include "ext/standard/php_smart_str.h"
-#include "ext/standard/php_var.h"
 #include "sha256.h"
-
-#if defined(HAVE_HASH_EXT) && !defined(COMPILE_DL_HASH)
-# include "ext/hash/php_hash.h"
-#endif
 
 #define PS_OPEN_ARGS void **mod_data, const char *save_path, const char *session_name TSRMLS_DC
 #define PS_CLOSE_ARGS void **mod_data TSRMLS_DC
@@ -141,7 +135,7 @@ typedef struct _php_ps_globals_50_51 {
 	int define_sid;
 } php_ps_globals_50_51;
 
-typedef struct _php_ps_globals_52 {
+typedef struct _php_ps_globals_52_60 {
 	char *save_path;
 	char *session_name;
 	char *id;
@@ -177,66 +171,13 @@ typedef struct _php_ps_globals_52 {
 	int send_cookie;
 	int define_sid;
 	zend_bool invalid_session_id;	/* allows the driver to report about an invalid session id and request id regeneration */
-} php_ps_globals_52;
+} php_ps_globals_52_60;
 
-typedef struct _php_ps_globals_53 {
-	char *save_path;
-	char *session_name;
-	char *id;
-	char *extern_referer_chk;
-	char *entropy_file;
-	char *cache_limiter;
-	long entropy_length;
-	long cookie_lifetime;
-	char *cookie_path;
-	char *cookie_domain;
-	zend_bool  cookie_secure;
-	zend_bool  cookie_httponly;
-	ps_module *mod;
-	void *mod_data;
-	php_session_status session_status;
-	long gc_probability;
-	long gc_divisor;
-	long gc_maxlifetime;
-	int module_number;
-	long cache_expire;
-	union {
-		zval *names[6];
-		struct {
-			zval *ps_open;
-			zval *ps_close;
-			zval *ps_read;
-			zval *ps_write;
-			zval *ps_destroy;
-			zval *ps_gc;
-		} name;
-	} mod_user_names;
-	zend_bool bug_compat; /* Whether to behave like PHP 4.2 and earlier */
-	zend_bool bug_compat_warn; /* Whether to warn about it */
-	const struct ps_serializer_struct *serializer;
-	zval *http_session_vars;
-	zend_bool auto_start;
-	zend_bool use_cookies;
-	zend_bool use_only_cookies;
-	zend_bool use_trans_sid;	/* contains the INI value of whether to use trans-sid */
-	zend_bool apply_trans_sid;	/* whether or not to enable trans-sid for the current request */
-
-	long hash_func;
-#if defined(HAVE_HASH_EXT) && !defined(COMPILE_DL_HASH)
-	php_hash_ops *hash_ops;
-#endif
-	long hash_bits_per_character;
-	int send_cookie;
-	int define_sid;
-	zend_bool invalid_session_id;	/* allows the driver to report about an invalid session id and request id regeneration */
-} php_ps_globals_53;
 
 #ifdef ZTS
 static ts_rsrc_id session_globals_id = 0;
-# if (PHP_MAJOR_VERSION == 5 && PHP_MINOR_VERSION >= 3)
-#  define SESSION_G(v) TSRMG(session_globals_id, php_ps_globals_53 *, v)
-# elif (PHP_MAJOR_VERSION == 5 && PHP_MINOR_VERSION >= 2)
-#  define SESSION_G(v) TSRMG(session_globals_id, php_ps_globals_52 *, v)
+# if PHP_MAJOR_VERSION > 5 || (PHP_MAJOR_VERSION == 5 && PHP_MINOR_VERSION >= 2)
+#  define SESSION_G(v) TSRMG(session_globals_id, php_ps_globals_52_60 *, v)
 # elif (PHP_MAJOR_VERSION == 5)
 #  define SESSION_G(v) TSRMG(session_globals_id, php_ps_globals_50_51 *, v)
 # elif (PHP_MAJOR_VERSION == 4 && PHP_MINOR_VERSION >= 3)
@@ -245,10 +186,8 @@ static ts_rsrc_id session_globals_id = 0;
     UNSUPPORTED PHP VERSION
 # endif
 #else
-# if (PHP_MAJOR_VERSION == 5 && PHP_MINOR_VERSION >= 3)
-static php_ps_globals_53 *session_globals = NULL;
-# elif (PHP_MAJOR_VERSION == 5 && PHP_MINOR_VERSION >= 2)
-static php_ps_globals_52 *session_globals = NULL;
+# if PHP_MAJOR_VERSION > 5 || (PHP_MAJOR_VERSION == 5 && PHP_MINOR_VERSION >= 2)
+static php_ps_globals_52_60 *session_globals = NULL;
 # elif (PHP_MAJOR_VERSION == 5)
 static php_ps_globals_50_51 *session_globals = NULL;
 # elif (PHP_MAJOR_VERSION == 4 && PHP_MINOR_VERSION >= 3)
@@ -258,114 +197,6 @@ static php_ps_globals_43_44 *session_globals = NULL;
 # endif
 #define SESSION_G(v) (session_globals->v)
 #endif
-
-ps_serializer *(*suhosin_find_ps_serializer)(char *name TSRMLS_DC) = NULL;
-
-#define PS_ENCODE_VARS 											\
-	char *key;													\
-	uint key_length;											\
-	ulong num_key;												\
-	zval **struc;
-
-#define PS_ENCODE_LOOP(code) do {									\
-		HashTable *_ht = Z_ARRVAL_P(SESSION_G(http_session_vars));			\
-		int key_type;												\
-																	\
-		for (zend_hash_internal_pointer_reset(_ht);					\
-				(key_type = zend_hash_get_current_key_ex(_ht, &key, &key_length, &num_key, 0, NULL)) != HASH_KEY_NON_EXISTANT; \
-					zend_hash_move_forward(_ht)) {					\
-			if (key_type == HASH_KEY_IS_LONG) {						\
-				php_error_docref(NULL TSRMLS_CC, E_NOTICE, "Skipping numeric key %ld", num_key);	\
-				continue;											\
-			}														\
-			key_length--;											\
-			if (suhosin_get_session_var(key, key_length, &struc TSRMLS_CC) == SUCCESS) {	\
-				code;		 										\
-			} 														\
-		}															\
-	} while(0)
-
-static int suhosin_get_session_var(char *name, size_t namelen, zval ***state_var TSRMLS_DC) /* {{{ */
-{
-	int ret = FAILURE;
-
-	if (SESSION_G(http_session_vars) && SESSION_G(http_session_vars)->type == IS_ARRAY) {
-		ret = zend_hash_find(Z_ARRVAL_P(SESSION_G(http_session_vars)), name, namelen + 1, (void **) state_var);
-
-		/* If register_globals is enabled, and
-		 * if there is an entry for the slot in $_SESSION, and
-		 * if that entry is still set to NULL, and
-		 * if the global var exists, then
-		 * we prefer the same key in the global sym table. */
-
-		if (PG(register_globals) && ret == SUCCESS && Z_TYPE_PP(*state_var) == IS_NULL) {
-			zval **tmp;
-
-			if (zend_hash_find(&EG(symbol_table), name, namelen + 1, (void **) &tmp) == SUCCESS) {
-				*state_var = tmp;
-			}
-		}
-	}
-	return ret;
-}
-
-#define PS_DELIMITER '|'
-#define PS_UNDEF_MARKER '!'
-
-int suhosin_session_encode(char **newstr, int *newlen TSRMLS_DC)
-{
-	smart_str buf = {0};
-	php_serialize_data_t var_hash;
-	PS_ENCODE_VARS;
-
-	PHP_VAR_SERIALIZE_INIT(var_hash);
-
-	PS_ENCODE_LOOP(
-			smart_str_appendl(&buf, key, key_length);
-			if (key[0] == PS_UNDEF_MARKER || memchr(key, PS_DELIMITER, key_length)) {
-				PHP_VAR_SERIALIZE_DESTROY(var_hash);
-				smart_str_free(&buf);
-				return FAILURE;
-			}
-			smart_str_appendc(&buf, PS_DELIMITER);
-
-			php_var_serialize(&buf, struc, &var_hash TSRMLS_CC);
-		} else {
-			smart_str_appendc(&buf, PS_UNDEF_MARKER);
-			smart_str_appendl(&buf, key, key_length);
-			smart_str_appendc(&buf, PS_DELIMITER);
-	);
-
-	if (newlen) {
-		*newlen = buf.len;
-	}
-	smart_str_0(&buf);
-	*newstr = buf.c;
-
-	PHP_VAR_SERIALIZE_DESTROY(var_hash);
-	return SUCCESS;
-}
-
-static void suhosin_send_cookie()
-{
-        int  * session_send_cookie = &SESSION_G(send_cookie);
-        char * base;
-        zend_ini_entry *ini_entry;
-        
-        /* The following is requires to be 100% compatible to PHP 
-           versions where the hash extension is not available by default */
-#if (PHP_MAJOR_VERSION >= 5 && PHP_MINOR_VERSION >= 3)
-        if (zend_hash_find(EG(ini_directives), "session.hash_bits_per_character", sizeof("session.hash_bits_per_character"), (void **) &ini_entry) == SUCCESS) {
-#ifndef ZTS
-	        base = (char *) ini_entry->mh_arg2;
-#else
-	        base = (char *) ts_resource(*((int *) ini_entry->mh_arg2));
-#endif
-                session_send_cookie = (int *) (base+(size_t) ini_entry->mh_arg1+sizeof(long));
-        }
-#endif
-        *session_send_cookie = 1;
-}
 
 void suhosin_get_ipv4(char *buf TSRMLS_DC)
 {
@@ -641,7 +472,7 @@ static int suhosin_hook_s_read(void **mod_data, const char *key, char **val, int
 regenerate:
 		SDEBUG("regenerating key is %s", key);
 		KEY = SESSION_G(id) = SESSION_G(mod)->s_create_sid(&SESSION_G(mod_data), NULL TSRMLS_CC);
-		suhosin_send_cookie();
+		SESSION_G(send_cookie) = 1;
 	} else if (strlen(key) > SUHOSIN_G(session_max_id_length)) {
 		suhosin_log(S_SESSION, "session id ('%s') exceeds maximum length - regenerating", KEY);
 		if (!SUHOSIN_G(simulation)) {
@@ -790,7 +621,6 @@ static int suhosin_hook_session_RINIT(INIT_FUNC_ARGS)
 
 void suhosin_hook_session(TSRMLS_D)
 {
-        ps_serializer *serializer;
 	zend_ini_entry *ini_entry;
 	zend_module_entry *module;
 #ifdef ZTS
@@ -856,14 +686,6 @@ void suhosin_hook_session(TSRMLS_D)
 	ini_entry->on_modify = suhosin_OnUpdateSaveHandler;
 	
 	suhosin_hook_session_module(TSRMLS_C);
-	
-        /* Protect the PHP serializer from ! attacks */
-# if PHP_MAJOR_VERSION > 5 || (PHP_MAJOR_VERSION == 5 && PHP_MINOR_VERSION >= 2)
-        serializer = SESSION_G(serializer);
-        if (serializer != NULL && strcmp(serializer->name, "php")==0) {
-                serializer->encode = suhosin_session_encode;
-        }
-#endif
 }
 
 void suhosin_unhook_session(TSRMLS_D)
