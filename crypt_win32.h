@@ -16,7 +16,7 @@
    +----------------------------------------------------------------------+
  */
 
-/* $Id: crypt_win32.h,v 1.1.1.1 2007-11-28 01:15:35 sesser Exp $ */
+/* $Id: crypt_win32.h,v 1.1 2006-09-11 10:20:47 sesser Exp $ */
 
 /* This code is distributed under the PHP license with permission from
    the author Jochen Obalek <jochen.obalek@bigfoot.de> */

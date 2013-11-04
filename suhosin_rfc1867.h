@@ -2,8 +2,7 @@
   +----------------------------------------------------------------------+
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
-  | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007 SektionEins GmbH                                  |
+  | Copyright (c) 2006 The Hardened-PHP Project                          |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -13,11 +12,11 @@
   | obtain it through the world-wide-web, please send a note to          |
   | license@php.net so we can mail you a copy immediately.               |
   +----------------------------------------------------------------------+
-  | Author: Stefan Esser <sesser@sektioneins.de>                         |
+  | Author: Stefan Esser <sesser@hardened-php.net>                       |
   +----------------------------------------------------------------------+
 */
 
-/* $Id: suhosin_rfc1867.h,v 1.1.1.1 2007-11-28 01:15:35 sesser Exp $ */
+/* $Id: suhosin_rfc1867.h,v 1.6 2006-11-14 15:33:26 sesser Exp $ */
 
 #ifndef SUHOSIN_RFC1867_H
 #define SUHOSIN_RFC1867_H

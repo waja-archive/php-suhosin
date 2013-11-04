@@ -2,8 +2,7 @@
   +----------------------------------------------------------------------+
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
-  | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007 SektionEins GmbH                                  |
+  | Copyright (c) 2006 The Hardened-PHP Project                          |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -13,11 +12,11 @@
   | obtain it through the world-wide-web, please send a note to          |
   | license@php.net so we can mail you a copy immediately.               |
   +----------------------------------------------------------------------+
-  | Author: Stefan Esser <sesser@sektioneins.de>                         |
+  | Author: Stefan Esser <sesser@hardened-php.net>                       |
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: ifilter.c,v 1.1.1.1 2007-11-28 01:15:35 sesser Exp $ 
+  $Id: ifilter.c,v 1.13 2007-05-19 21:31:56 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -115,91 +114,6 @@ void normalize_varname(char *varname)
 }
 /* }}} */
 
-static unsigned char suhosin_hexchars[] = "0123456789ABCDEF";
-
-static const char suhosin_is_dangerous_char[256] = {
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-};
-
-/* {{{ suhosin_server_encode
- */
-static void suhosin_server_strip(HashTable *arr, char *key, int klen)
-{
-	zval **tzval;
-	unsigned char *s, *t;
-
-	if (zend_hash_find(arr, key, klen, (void **) &tzval) == SUCCESS &&
-			Z_TYPE_PP(tzval) == IS_STRING) {
-		
-		s = t = Z_STRVAL_PP(tzval);
-		for (; *t; t++) {
-			if (suhosin_is_dangerous_char[*t]) {
-				*t = '?';
-			}
-		}
-		Z_STRLEN_PP(tzval) = t-s;
-	}
-}
-/* }}} */
-
-/* {{{ suhosin_server_encode
- */
-static void suhosin_server_encode(HashTable *arr, char *key, int klen)
-{
-	zval **tzval;
-	unsigned char *temp = NULL, *t, *newv, *n;
-	int extra = 0;
-
-	if (zend_hash_find(arr, key, klen, (void **) &tzval) == SUCCESS &&
-			Z_TYPE_PP(tzval) == IS_STRING) {
-		
-		temp = Z_STRVAL_PP(tzval);
-		
-		t = temp;
-		for (t = temp; *t; t++) {
-			if (suhosin_is_dangerous_char[*t]) {
-				extra += 2;
-			}
-		}
-		
-		/* no extra bytes required */
-		if (extra == 0) {
-			return;
-		}
-		
-		n = newv = emalloc(t - temp + 1 + extra);
-		t = temp;
-		for (t = temp; *t; t++, n++) {
-			if (suhosin_is_dangerous_char[*t]) {
-				*n++ = '%';
-				*n++ = suhosin_hexchars[*t >> 4];
-				*n = suhosin_hexchars[*t & 15];
-			} else {
-				*n = *t;
-			}
-		}
-		*n = 0;
-		
-		Z_STRVAL_PP(tzval) = newv;
-		Z_STRLEN_PP(tzval) = n-newv;
-	}
-}
-/* }}} */
 
 /* {{{ suhosin_register_server_variables
  */
@@ -257,17 +171,6 @@ void suhosin_register_server_variables(zval *track_vars_array TSRMLS_DC)
 		ZVAL_STRING(z, SUHOSIN_G(decrypted_cookie), 0);
 		zend_hash_update(svars, "HTTP_COOKIE", sizeof("HTTP_COOKIE"), (void **)&z, sizeof(zval *), NULL);
 		SUHOSIN_G(decrypted_cookie) = NULL;
-	}
-	
-	if (SUHOSIN_G(server_encode)) {
-		/* suhosin_server_encode(svars, "argv", sizeof("argv")); */
-		suhosin_server_encode(svars, "REQUEST_URI", sizeof("REQUEST_URI"));
-		suhosin_server_encode(svars, "QUERY_STRING", sizeof("QUERY_STRING"));
-	}
-	if (SUHOSIN_G(server_strip)) {
-		suhosin_server_strip(svars, "PHP_SELF", sizeof("PHP_SELF"));
-		suhosin_server_strip(svars, "PATH_INFO", sizeof("PATH_INFO"));
-		suhosin_server_strip(svars, "PATH_TRANSLATED", sizeof("PATH_TRANSLATED"));
 	}
 }
 /* }}} */

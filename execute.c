@@ -2,8 +2,7 @@
   +----------------------------------------------------------------------+
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
-  | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007 SektionEins GmbH                                  |
+  | Copyright (c) 2006 The Hardened-PHP Project                          |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -13,11 +12,11 @@
   | obtain it through the world-wide-web, please send a note to          |
   | license@php.net so we can mail you a copy immediately.               |
   +----------------------------------------------------------------------+
-  | Author: Stefan Esser <sesser@sektioneins.de>                         |
+  | Author: Stefan Esser <sesser@hardened-php.net>                       |
   +----------------------------------------------------------------------+
 */
 
-/* $Id: execute.c,v 1.1.1.1 2007-11-28 01:15:35 sesser Exp $ */
+/* $Id: execute.c,v 1.43 2007-04-12 09:37:43 sesser Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -1033,63 +1032,6 @@ static int ih_phpinfo(IH_HANDLER_PARAMS)
 }
 
 
-static int ih_function_exists(IH_HANDLER_PARAMS)
-{
-	zval **function_name;
-	zend_function *func;
-	char *lcname;
-	zend_bool retval;
-	int func_name_len;
-	
-	if (ZEND_NUM_ARGS()!=1 || zend_get_parameters_ex(1, &function_name)==FAILURE) {
-		ZEND_WRONG_PARAM_COUNT();
-	}
-	convert_to_string_ex(function_name);
-	func_name_len = Z_STRLEN_PP(function_name);
-	lcname = estrndup(Z_STRVAL_PP(function_name), func_name_len);
-	zend_str_tolower(lcname, func_name_len);
-
-	retval = (zend_hash_find(EG(function_table), lcname, func_name_len+1, (void **)&func) == SUCCESS);
-	
-	efree(lcname);
-
-	/*
-	 * A bit of a hack, but not a bad one: we see if the handler of the function
-	 * is actually one that displays "function is disabled" message.
-	 */
-	if (retval && func->type == ZEND_INTERNAL_FUNCTION &&
-		func->internal_function.handler == zif_display_disabled_function) {
-		retval = 0;
-	}
-
-	/* Now check if function is forbidden by Suhosin */
-	if (SUHOSIN_G(in_code_type) == SUHOSIN_EVAL) {
-		if (SUHOSIN_G(eval_whitelist) != NULL) {
-			if (!zend_hash_exists(SUHOSIN_G(eval_whitelist), lcname, func_name_len+1)) {
-			    retval = 0;
-			}
-		} else if (SUHOSIN_G(eval_blacklist) != NULL) {
-			if (zend_hash_exists(SUHOSIN_G(eval_blacklist), lcname, func_name_len+1)) {
-			    retval = 0;
-			}
-		}
-	}
-	
-	if (SUHOSIN_G(func_whitelist) != NULL) {
-		if (!zend_hash_exists(SUHOSIN_G(func_whitelist), lcname, func_name_len+1)) {
-		    retval = 0;
-		}
-	} else if (SUHOSIN_G(func_blacklist) != NULL) {
-		if (zend_hash_exists(SUHOSIN_G(func_blacklist), lcname, func_name_len+1)) {
-		    retval = 0;
-		}
-	}
-
-	RETVAL_BOOL(retval);
-	return (1);
-}
-
-
 internal_function_handler ihandlers[] = {
     { "preg_replace", ih_preg_replace, NULL, NULL, NULL },
     { "mail", ih_mail, NULL, NULL, NULL },
@@ -1106,8 +1048,6 @@ internal_function_handler ihandlers[] = {
     { "fbsql_change_user", ih_fixusername, (void *)1, NULL, NULL },
     { "fbsql_connect", ih_fixusername, (void *)2, NULL, NULL },
     { "fbsql_pconnect", ih_fixusername, (void *)2, NULL, NULL },
-    
-    { "function_exists", ih_function_exists, NULL, NULL, NULL },
 	
     { "ifx_connect", ih_fixusername, (void *)2, NULL, NULL },
     { "ifx_pconnect", ih_fixusername, (void *)2, NULL, NULL },

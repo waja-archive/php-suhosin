@@ -17,7 +17,7 @@
    +----------------------------------------------------------------------+
  */
 
-/* $Id: rfc1867.c,v 1.1.1.1 2007-11-28 01:15:35 sesser Exp $ */
+/* $Id: rfc1867.c,v 1.9 2006-10-02 12:40:59 sesser Exp $ */
 
 /*
  *  This product includes software developed by the Apache Group

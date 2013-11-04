@@ -2,8 +2,7 @@
   +----------------------------------------------------------------------+
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
-  | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007 SektionEins GmbH                                  |
+  | Copyright (c) 2006 The Hardened-PHP Project                          |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -13,16 +12,16 @@
   | obtain it through the world-wide-web, please send a note to          |
   | license@php.net so we can mail you a copy immediately.               |
   +----------------------------------------------------------------------+
-  | Author: Stefan Esser <sesser@sektioneins.de>                         |
+  | Author: Stefan Esser <sesser@hardened-php.net>                       |
   +----------------------------------------------------------------------+
 */
 
-/* $Id: php_suhosin.h,v 1.2 2007-11-28 16:16:01 sesser Exp $ */
+/* $Id: php_suhosin.h,v 1.62 2007-05-19 21:31:56 sesser Exp $ */
 
 #ifndef PHP_SUHOSIN_H
 #define PHP_SUHOSIN_H
 
-#define SUHOSIN_EXT_VERSION  "0.9.22"
+#define SUHOSIN_EXT_VERSION  "0.9.20"
 
 /*#define SUHOSIN_DEBUG*/
 #define SUHOSIN_LOG "/tmp/suhosin_log.txt"
@@ -216,23 +215,18 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	zend_bool	coredump;
 	zend_bool	apc_bug_workaround;
 	zend_bool	already_scanned;
-	
-	zend_bool	server_encode;
-	zend_bool	server_strip;
-	
-	zend_bool	disable_display_errors;
 
-	/* PERDIR Handling */
-        char *perdir;
-        zend_bool log_perdir;
-        zend_bool exec_perdir;
-        zend_bool get_perdir;
-        zend_bool post_perdir;
-        zend_bool cookie_perdir;
-        zend_bool request_perdir;
-        zend_bool upload_perdir;
-        zend_bool sql_perdir;
-        zend_bool misc_perdir;
+    /* PERDIR Handling */
+    char *perdir;
+    zend_bool log_perdir;
+    zend_bool exec_perdir;
+    zend_bool get_perdir;
+    zend_bool post_perdir;
+    zend_bool cookie_perdir;
+    zend_bool request_perdir;
+    zend_bool upload_perdir;
+    zend_bool sql_perdir;
+    zend_bool misc_perdir;
 
 ZEND_END_MODULE_GLOBALS(suhosin)
 
@@ -242,10 +236,6 @@ ZEND_END_MODULE_GLOBALS(suhosin)
 #define SUHOSIN_G(v) (suhosin_globals.v)
 #endif
 
-#ifndef ZEND_INI_STAGE_HTACCESS
-#define ZEND_INI_STAGE_HTACCESS (1<<5)
-#endif
- 
 #ifndef ZEND_ENGINE_2
 #define OnUpdateLong OnUpdateInt
 #define zend_symtable_find zend_hash_find
@@ -310,7 +300,7 @@ void suhosin_aes_encrypt(char *buff TSRMLS_DC);
 void suhosin_aes_decrypt(char *buff TSRMLS_DC);
 unsigned int suhosin_input_filter(int arg, char *var, char **val, unsigned int val_len, unsigned int *new_val_len TSRMLS_DC);
 unsigned int suhosin_input_filter_wrapper(int arg, char *var, char **val, unsigned int val_len, unsigned int *new_val_len TSRMLS_DC);
-extern unsigned int (*old_input_filter)(int arg, char *var, char **val, unsigned int val_len, unsigned int *new_val_len TSRMLS_DC);
+unsigned int (*old_input_filter)(int arg, char *var, char **val, unsigned int val_len, unsigned int *new_val_len TSRMLS_DC);
 void normalize_varname(char *varname);
 int suhosin_rfc1867_filter(unsigned int event, void *event_data, void **extra TSRMLS_DC);
 void suhosin_bailout(TSRMLS_D);
