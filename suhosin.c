@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: suhosin.c,v 1.33 2006-11-20 15:50:30 sesser Exp $ */
+/* $Id: suhosin.c,v 1.32 2006-11-14 16:52:06 sesser Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -35,7 +35,6 @@
 #include "suhosin_logo.h"
 #include "ext/standard/php_string.h"
 #include "ext/standard/url.h"
-#include "ext/standard/base64.h"
 
 ZEND_DECLARE_MODULE_GLOBALS(suhosin)
 
@@ -546,18 +545,12 @@ return_plain:
    Returns an array containing the raw cookie values */
 static PHP_FUNCTION(suhosin_get_raw_cookies)
 {
-	char *var, *val, *res;
+	char *var, *val, *res = estrdup(SUHOSIN_G(raw_cookie));
     zval *array_ptr = return_value;
     char *strtok_buf = NULL;
     int val_len;
     
 	array_init(array_ptr);
-
-    if (SUHOSIN_G(raw_cookie)) {
-        res = estrdup(SUHOSIN_G(raw_cookie));
-    } else {
-        return;
-    }
 
 	var = php_strtok_r(res, ";", &strtok_buf);
 	
@@ -905,39 +898,14 @@ static void suhosin_ini_displayer(zend_ini_entry *ini_entry, int type)
 PHP_MINFO_FUNCTION(suhosin)
 {
 	php_info_print_box_start(0);
-	if (!sapi_module.phpinfo_as_text) {
-		if (PG(expose_php)) {
-			PUTS("<a href=\"http://www.hardened-php.net/suhosin/index.html\"><img border=\"0\" src=\"");
-			if (SG(request_info).request_uri) {
-				char *elem_esc = php_info_html_esc(SG(request_info).request_uri TSRMLS_CC);
-				PUTS(elem_esc);
-				efree(elem_esc);
-			}
-			PUTS("?="SUHOSIN_LOGO_GUID"\" alt=\"Suhosin logo\" /></a>\n");
-		} else do {
-			char *enc_logo;
-			int ret;
-			zval **agent_name;
-			
-			zend_is_auto_global("_SERVER", sizeof("_SERVER")-1 TSRMLS_CC);
-			if (!PG(http_globals)[TRACK_VARS_SERVER] || 
-			    zend_hash_find(PG(http_globals)[TRACK_VARS_SERVER]->value.ht, "HTTP_USER_AGENT", sizeof("HTTP_USER_AGENT"), (void **) &agent_name)==FAILURE) {
-			    break;
-			}
-			if (Z_TYPE_PP(agent_name) != IS_STRING) {
-			    break;
-			}
-			if (strstr(Z_STRVAL_PP(agent_name), "Gecko") == NULL && strstr(Z_STRVAL_PP(agent_name), "Opera") == NULL) {
-			    break;
-			}
-			PUTS("<a href=\"http://www.hardened-php.net/suhosin/index.html\"><img border=\"0\" src=\"data:image/jpeg;base64,");
-			enc_logo=php_base64_encode(suhosin_logo, sizeof(suhosin_logo), &ret);
-			if (enc_logo) {
-				PUTS(enc_logo);
-				efree(enc_logo);
-			}
-			PUTS("\" alt=\"Suhosin logo\" /></a>\n");
-		} while(0);
+	if (PG(expose_php) && !sapi_module.phpinfo_as_text) {
+		PUTS("<a href=\"http://www.hardened-php.net/suhosin/index.html\"><img border=\"0\" src=\"");
+		if (SG(request_info).request_uri) {
+			char *elem_esc = php_info_html_esc(SG(request_info).request_uri TSRMLS_CC);
+			PUTS(elem_esc);
+			efree(elem_esc);
+		}
+		PUTS("?="SUHOSIN_LOGO_GUID"\" alt=\"Suhosin logo\" /></a>\n");
 	}
 	PUTS("This server is protected with the Suhosin Extension " SUHOSIN_EXT_VERSION);
 	PUTS(!sapi_module.phpinfo_as_text?"<br /><br />":"\n\n");
