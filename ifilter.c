@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: ifilter.c,v 1.7 2006-11-06 16:24:59 sesser Exp $ 
+  $Id: ifilter.c,v 1.6 2006-10-25 21:38:00 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -182,10 +182,6 @@ unsigned int suhosin_input_filter(int arg, char *var, char **val, unsigned int v
 {
 	char *index, *prev_index = NULL;
 	unsigned int var_len, total_len, depth = 0;
-
-	if (new_val_len) {
-		*new_val_len = 0;
-	}
 
 	/* Drop this variable if the limit was reached */
         switch (arg) {

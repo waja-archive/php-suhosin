@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: suhosin.c,v 1.32 2006-11-14 16:52:06 sesser Exp $ */
+/* $Id: suhosin.c,v 1.30 2006-10-25 21:38:00 sesser Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -150,22 +150,6 @@ static void suhosin_shutdown(zend_extension *extension)
 static int suhosin_startup_wrapper(zend_extension *ext)
 {
 	int res;
-	zend_extension *ex = &suhosin_zend_extension_entry;
-    char *new_info;
-    int new_info_length;
-	
-	/* Ugly but working hack */
-	new_info_length = sizeof("%s\n    with %s v%s, %s, by %s\n")
-                        + strlen(ext->author)
-						+ strlen(ex->name)
-						+ strlen(ex->version)
-						+ strlen(ex->copyright)
-						+ strlen(ex->author);
-
-	new_info = (char *) malloc(new_info_length+1);
-	sprintf(new_info, "%s\n    with %s v%s, %s, by %s", ext->author, ex->name, ex->version, ex->copyright, ex->author);
-	ext->author = new_info;
-
 	
 	ze->startup = old_startup;
 	res = old_startup(ext);
@@ -642,7 +626,6 @@ PHP_INI_BEGIN()
 	STD_ZEND_INI_BOOLEAN("suhosin.multiheader",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, allow_multiheader,	zend_suhosin_globals,	suhosin_globals)
 	
 	STD_ZEND_INI_BOOLEAN("suhosin.simulation",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, simulation,	zend_suhosin_globals,	suhosin_globals)
-	STD_ZEND_INI_BOOLEAN("suhosin.protectkey",		"1",		ZEND_INI_SYSTEM,	OnUpdateBool, protectkey,	zend_suhosin_globals,	suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.coredump",		"0",		ZEND_INI_SYSTEM,	OnUpdateBool, coredump,	zend_suhosin_globals,	suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.apc_bug_workaround",		"0",		ZEND_INI_SYSTEM,	OnUpdateBool, apc_bug_workaround,	zend_suhosin_globals,	suhosin_globals)
 	
@@ -701,7 +684,7 @@ PHP_INI_BEGIN()
 	STD_PHP_INI_ENTRY("suhosin.session.max_id_length", "128", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, session_max_id_length, zend_suhosin_globals, suhosin_globals)
 	
 
-	STD_ZEND_INI_BOOLEAN("suhosin.cookie.encrypt",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, cookie_encrypt,	zend_suhosin_globals,	suhosin_globals)
+	STD_ZEND_INI_BOOLEAN("suhosin.cookie.encrypt",		"1",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, cookie_encrypt,	zend_suhosin_globals,	suhosin_globals)
 	STD_PHP_INI_ENTRY("suhosin.cookie.cryptkey", "", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateString, cookie_cryptkey, zend_suhosin_globals, suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.cookie.cryptua",		"1",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, cookie_cryptua,	zend_suhosin_globals,	suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.cookie.cryptdocroot",		"1",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, cookie_cryptdocroot,	zend_suhosin_globals,	suhosin_globals)
@@ -883,15 +866,6 @@ PHP_RSHUTDOWN_FUNCTION(suhosin)
 }
 /* }}} */
 
-/* {{{ suhosin_ini_displayer(zend_ini_entry *ini_entry, int type)
- */
-static void suhosin_ini_displayer(zend_ini_entry *ini_entry, int type)
-{
-    TSRMLS_FETCH();
-
-    PHPWRITE("[ protected ]", strlen("[ protected ]"));
-}
-/* }}} */
 
 /* {{{ PHP_MINFO_FUNCTION
  */
@@ -916,30 +890,8 @@ PHP_MINFO_FUNCTION(suhosin)
 	}
 	php_info_print_box_end();
 
-    if (SUHOSIN_G(protectkey)) {
-        zend_ini_entry *i;
-		
-		if (zend_hash_find(EG(ini_directives), "suhosin.cookie.cryptkey", sizeof("suhosin.cookie.cryptkey"), (void **) &i)==SUCCESS) {
-            i->displayer = suhosin_ini_displayer;
-        }
-		if (zend_hash_find(EG(ini_directives), "suhosin.session.cryptkey", sizeof("suhosin.session.cryptkey"), (void **) &i)==SUCCESS) {
-            i->displayer = suhosin_ini_displayer;
-        }
-    }
-    
+
 	DISPLAY_INI_ENTRIES();
-
-    if (SUHOSIN_G(protectkey)) {
-        zend_ini_entry *i;
-		
-		if (zend_hash_find(EG(ini_directives), "suhosin.cookie.cryptkey", sizeof("suhosin.cookie.cryptkey"), (void **) &i)==SUCCESS) {
-            i->displayer = NULL;
-        }
-		if (zend_hash_find(EG(ini_directives), "suhosin.session.cryptkey", sizeof("suhosin.session.cryptkey"), (void **) &i)==SUCCESS) {
-            i->displayer = NULL;
-        }
-    }
-
 }
 /* }}} */
 

@@ -16,10 +16,10 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: suhosin_rfc1867.h,v 1.6 2006-11-14 15:33:26 sesser Exp $ */
+/* $Id: suhosin_rfc1867.h,v 1.5 2006-09-02 23:20:38 sesser Exp $ */
 
-#ifndef SUHOSIN_RFC1867_H
-#define SUHOSIN_RFC1867_H
+#ifndef RFC1867_H
+#define RFC1867_H
 
 #include "rfc1867.h"
 #include "SAPI.h"
@@ -36,6 +36,8 @@
 #define MULTIPART_EVENT_FILE_DATA	3
 #define MULTIPART_EVENT_FILE_END	4
 #define MULTIPART_EVENT_END		5
+
+#endif
 
 typedef struct _multipart_event_start {
 	size_t	content_length;
@@ -73,8 +75,6 @@ typedef struct _multipart_event_end {
 	size_t	post_bytes_processed;
 } multipart_event_end;
 
-#endif
-
 SAPI_POST_HANDLER_FUNC(suhosin_rfc1867_post_handler);
 
 void destroy_uploaded_files_hash(TSRMLS_D);
@@ -84,4 +84,4 @@ extern PHP_SUHOSIN_API int (*php_rfc1867_callback)(unsigned int event, void *eve
 extern PHPAPI int (*php_rfc1867_callback)(unsigned int event, void *event_data, void **extra TSRMLS_DC);
 #endif
 
-#endif /* SUHOSIN_RFC1867_H */
+#endif /* RFC1867_H */

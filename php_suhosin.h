@@ -16,12 +16,12 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: php_suhosin.h,v 1.47 2006-11-14 16:52:06 sesser Exp $ */
+/* $Id: php_suhosin.h,v 1.40 2006-10-26 16:28:36 sesser Exp $ */
 
 #ifndef PHP_SUHOSIN_H
 #define PHP_SUHOSIN_H
 
-#define SUHOSIN_EXT_VERSION  "0.9.12"
+#define SUHOSIN_EXT_VERSION  "0.9.10"
 
 /*#define SUHOSIN_DEBUG*/
 #define SUHOSIN_LOG "/tmp/suhosin_log.txt"
@@ -67,7 +67,6 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	zend_uint in_code_type;
 	long execution_depth;
 	zend_bool simulation;
-	zend_bool protectkey;
 	zend_bool executor_allow_symlink;
 	char *filter_action;
 	char *sql_user_prefix;

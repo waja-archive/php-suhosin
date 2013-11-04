@@ -1,14 +1,3 @@
-2006-11-14 - 0.9.12
-
-    - Adding ap_php_snprintf() when compiling against PHP 4.3.9
-    - Added suhosin.protectkey to remove cryptkeys from phpinfo() output
-    - Disabled suhosin.cookie.encrypt in default install
-    - Fixed static compilation against PHP 5.2.0
-
-2006-11-06 - 0.9.11
-    
-    - Fixed input filter for simulation mode 
-
 2006-10-26 - 0.9.10
 
     - Fixed ZTS compile problem in new code

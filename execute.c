@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: execute.c,v 1.35 2006-11-14 14:39:48 sesser Exp $ */
+/* $Id: execute.c,v 1.32 2006-10-21 11:38:23 sesser Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -92,7 +92,7 @@ static int suhosin_check_filename(char *s, int len TSRMLS_DC)
 	uint indexlen;
 	ulong numindex;
 	zend_bool isOk;
-
+	
 	/* check if filename is too long */
 	if (len > MAXPATHLEN) {
 		return SUHOSIN_CODE_TYPE_LONGNAME;
@@ -924,12 +924,8 @@ static int function_lookup(zend_extension *extension)
 	if (zo_set_oe_ex != NULL) {
 		return ZEND_HASH_APPLY_STOP;
 	}
-    
-    if (extension->handle != NULL) {
 
-	    zo_set_oe_ex = (void *)DL_FETCH_SYMBOL(extension->handle, "zend_optimizer_set_oe_ex");
-    
-    }
+	zo_set_oe_ex = (void *)DL_FETCH_SYMBOL(extension->handle, "zend_optimizer_set_oe_ex");
 
 	return 0;
 }
