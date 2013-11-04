@@ -2,7 +2,8 @@
   +----------------------------------------------------------------------+
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
-  | Copyright (c) 2006 The Hardened-PHP Project                          |
+  | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
+  | Copyright (c) 2007-2012 SektionEins GmbH                             |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -12,11 +13,11 @@
   | obtain it through the world-wide-web, please send a note to          |
   | license@php.net so we can mail you a copy immediately.               |
   +----------------------------------------------------------------------+
-  | Author: Stefan Esser <sesser@hardened-php.net>                       |
+  | Author: Stefan Esser <sesser@sektioneins.de>                         |
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: ufilter.c,v 1.9 2006-10-08 10:23:56 sesser Exp $ 
+  $Id: ufilter.c,v 1.1.1.1 2007-11-28 01:15:35 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -103,25 +104,25 @@ static int check_fileupload_varname(char *varname)
 	
 	/* Drop this variable if it exceeds the varname/total length limit */
 	if (SUHOSIN_G(max_varname_length) && SUHOSIN_G(max_varname_length) < var_len) {
-		suhosin_log(S_FILES, "configured request variable name length limit exceeded - dropped %s", var);
+		suhosin_log(S_FILES, "configured request variable name length limit exceeded - dropped variable '%s'", var);
 		if (!SUHOSIN_G(simulation)) {
 			goto return_failure;
 		}
 	}
 	if (SUHOSIN_G(max_totalname_length) && SUHOSIN_G(max_totalname_length) < total_len) {
-		suhosin_log(S_FILES, "configured request variable total name length limit exceeded - dropped %s", var);
+		suhosin_log(S_FILES, "configured request variable total name length limit exceeded - dropped variable '%s'", var);
 		if (!SUHOSIN_G(simulation)) {
 			goto return_failure;
 		}
 	}
 	if (SUHOSIN_G(max_post_name_length) && SUHOSIN_G(max_post_name_length) < var_len) {
-		suhosin_log(S_FILES, "configured POST variable name length limit exceeded - dropped %s", var);
+		suhosin_log(S_FILES, "configured POST variable name length limit exceeded - dropped variable '%s'", var);
 		if (!SUHOSIN_G(simulation)) {
 			goto return_failure;
 		}
 	}
 	if (SUHOSIN_G(max_post_totalname_length) && SUHOSIN_G(max_post_totalname_length) < var_len) {
-		suhosin_log(S_FILES, "configured POST variable total name length limit exceeded - dropped %s", var);
+		suhosin_log(S_FILES, "configured POST variable total name length limit exceeded - dropped variable '%s'", var);
 		if (!SUHOSIN_G(simulation)) {
 			goto return_failure;
 		}
@@ -138,13 +139,13 @@ static int check_fileupload_varname(char *varname)
 			index_length = index ? index - 1 - prev_index - 1: strlen(prev_index);
 			
 			if (SUHOSIN_G(max_array_index_length) && SUHOSIN_G(max_array_index_length) < index_length) {
-				suhosin_log(S_FILES, "configured request variable array index length limit exceeded - dropped %s", var);
+				suhosin_log(S_FILES, "configured request variable array index length limit exceeded - dropped variable '%s'", var);
 				if (!SUHOSIN_G(simulation)) {
 					goto return_failure;
 				}
 			} 
 			if (SUHOSIN_G(max_post_array_index_length) && SUHOSIN_G(max_post_array_index_length) < index_length) {
-				suhosin_log(S_FILES, "configured POST variable array index length limit exceeded - dropped %s", var);
+				suhosin_log(S_FILES, "configured POST variable array index length limit exceeded - dropped variable '%s'", var);
 				if (!SUHOSIN_G(simulation)) {
 					goto return_failure;
 				}
@@ -156,13 +157,13 @@ static int check_fileupload_varname(char *varname)
 	
 	/* Drop this variable if it exceeds the array depth limit */
 	if (SUHOSIN_G(max_array_depth) && SUHOSIN_G(max_array_depth) < depth) {
-		suhosin_log(S_FILES, "configured request variable array depth limit exceeded - dropped %s", var);
+		suhosin_log(S_FILES, "configured request variable array depth limit exceeded - dropped variable '%s'", var);
 		if (!SUHOSIN_G(simulation)) {
 			goto return_failure;
 		}
 	}
 	if (SUHOSIN_G(max_post_array_depth) && SUHOSIN_G(max_post_array_depth) < depth) {
-		suhosin_log(S_FILES, "configured POST variable array depth limit exceeded - dropped %s", var);
+		suhosin_log(S_FILES, "configured POST variable array depth limit exceeded - dropped variable '%s'", var);
 		if (!SUHOSIN_G(simulation)) {
 			goto return_failure;
 		}

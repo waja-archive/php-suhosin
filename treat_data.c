@@ -2,7 +2,8 @@
   +----------------------------------------------------------------------+
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
-  | Copyright (c) 2006 The Hardened-PHP Project                          |
+  | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
+  | Copyright (c) 2007-2012 SektionEins GmbH                             |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -12,11 +13,11 @@
   | obtain it through the world-wide-web, please send a note to          |
   | license@php.net so we can mail you a copy immediately.               |
   +----------------------------------------------------------------------+
-  | Author: Stefan Esser <sesser@hardened-php.net>                       |
+  | Author: Stefan Esser <sesser@sektioneins.de>                         |
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: treat_data.c,v 1.7 2006-09-09 10:44:07 sesser Exp $ 
+  $Id: treat_data.c,v 1.1.1.1 2007-11-28 01:15:35 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -37,6 +38,9 @@ SAPI_TREAT_DATA_FUNC(suhosin_treat_data)
 	zval *array_ptr;
 	int free_buffer = 0;
 	char *strtok_buf = NULL;
+
+	/* Mark that we were not yet called */
+	SUHOSIN_G(already_scanned) = 0;
 	
 	switch (arg) {
 		case PARSE_POST:
@@ -51,18 +55,31 @@ SAPI_TREAT_DATA_FUNC(suhosin_treat_data)
 						zval_ptr_dtor(&PG(http_globals)[TRACK_VARS_POST]);
 					}
 					PG(http_globals)[TRACK_VARS_POST] = array_ptr;
+					
+					if (SUHOSIN_G(max_request_variables) && (SUHOSIN_G(max_post_vars) == 0 || 
+					    SUHOSIN_G(max_request_variables) <= SUHOSIN_G(max_post_vars))) {
+						SUHOSIN_G(max_post_vars) = SUHOSIN_G(max_request_variables);
+					}
 					break;
 				case PARSE_GET:
 					if (PG(http_globals)[TRACK_VARS_GET]) {
 						zval_ptr_dtor(&PG(http_globals)[TRACK_VARS_GET]);
 					}
 					PG(http_globals)[TRACK_VARS_GET] = array_ptr;
+					if (SUHOSIN_G(max_request_variables) && (SUHOSIN_G(max_get_vars) == 0 || 
+					    SUHOSIN_G(max_request_variables) <= SUHOSIN_G(max_get_vars))) {
+						SUHOSIN_G(max_get_vars) = SUHOSIN_G(max_request_variables);
+					}
 					break;
 				case PARSE_COOKIE:
 					if (PG(http_globals)[TRACK_VARS_COOKIE]) {
 						zval_ptr_dtor(&PG(http_globals)[TRACK_VARS_COOKIE]);
 					}
 					PG(http_globals)[TRACK_VARS_COOKIE] = array_ptr;
+					if (SUHOSIN_G(max_request_variables) && (SUHOSIN_G(max_cookie_vars) == 0 || 
+					    SUHOSIN_G(max_request_variables) <= SUHOSIN_G(max_cookie_vars))) {
+						SUHOSIN_G(max_cookie_vars) = SUHOSIN_G(max_request_variables);
+					}					
 					break;
 			}
 			break;
@@ -118,6 +135,9 @@ SAPI_TREAT_DATA_FUNC(suhosin_treat_data)
 	var = php_strtok_r(res, separator, &strtok_buf);
 	
 	while (var) {
+		/* Overjump plain whitespace */
+		while (*var && *var == ' ') var++;
+
 		val = strchr(var, '=');
 		if (val) { /* have a value */
 			int val_len;
@@ -174,7 +194,13 @@ SAPI_TREAT_DATA_FUNC(suhosin_treat_data)
 
 void suhosin_hook_treat_data()
 {
-	sapi_register_treat_data(suhosin_treat_data);	
+	sapi_register_treat_data(suhosin_treat_data);
+#ifdef ZEND_ENGINE_2
+	if (old_input_filter == NULL) {
+		old_input_filter = sapi_module.input_filter;
+	}
+	sapi_module.input_filter = suhosin_input_filter_wrapper;
+#endif			
 }
 
 

@@ -2,7 +2,8 @@
   +----------------------------------------------------------------------+
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
-  | Copyright (c) 2006 The Hardened-PHP Project                          |
+  | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
+  | Copyright (c) 2007-2012 SektionEins GmbH                             |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -12,25 +13,30 @@
   | obtain it through the world-wide-web, please send a note to          |
   | license@php.net so we can mail you a copy immediately.               |
   +----------------------------------------------------------------------+
-  | Author: Stefan Esser <sesser@hardened-php.net>                       |
+  | Author: Stefan Esser <sesser@sektioneins.de>                         |
   +----------------------------------------------------------------------+
 */
 
-/* $Id: execute.c,v 1.31 2006-10-08 15:20:30 sesser Exp $ */
+/* $Id: execute.c,v 1.1.1.1 2007-11-28 01:15:35 sesser Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
+#include <fcntl.h>
 #include "php.h"
 #include "php_ini.h"
 #include "zend_hash.h"
 #include "zend_extensions.h"
 #include "ext/standard/info.h"
+#include "ext/standard/php_rand.h"
+#include "ext/standard/php_lcg.h"
 #include "php_suhosin.h"
 #include "zend_compile.h"
 #include "zend_llist.h"
 #include "SAPI.h"
+
+#include "sha256.h"
 
 
 static void (*old_execute)(zend_op_array *op_array TSRMLS_DC);
@@ -56,7 +62,7 @@ conts:
 	while (*h) {
 		n = (unsigned char *) needle;
 		if (toupper(*h++) == toupper(*n++)) {
-			for (t=h; *t || *n; t++, n++) {
+			for (t=h; *n; t++, n++) {
 				if (toupper(*t) != toupper(*n)) goto conts;
 			}
     		return ((char*)h-1);
@@ -83,6 +89,7 @@ conts:
 #define SUHOSIN_CODE_TYPE_BADFILE	12
 #define SUHOSIN_CODE_TYPE_LONGNAME	13
 #define SUHOSIN_CODE_TYPE_MANYDOTS	14
+#define SUHOSIN_CODE_TYPE_WRITABLE      15
 
 static int suhosin_check_filename(char *s, int len TSRMLS_DC)
 {
@@ -92,7 +99,7 @@ static int suhosin_check_filename(char *s, int len TSRMLS_DC)
 	uint indexlen;
 	ulong numindex;
 	zend_bool isOk;
-	
+
 	/* check if filename is too long */
 	if (len > MAXPATHLEN) {
 		return SUHOSIN_CODE_TYPE_LONGNAME;
@@ -113,7 +120,7 @@ static int suhosin_check_filename(char *s, int len TSRMLS_DC)
 			return SUHOSIN_CODE_TYPE_UPLOADED;
 		}
 	}
-	
+		
 	/* count number of directory traversals */
 	for (i=0; i < len-3; i++) {
 		if (s[i] == '.' && s[i+1] == '.' && (s[i+2] == '/' || s[i+2] == '\\')) {
@@ -215,6 +222,16 @@ SDEBUG("xxx %08x %08x",SUHOSIN_G(include_whitelist),SUHOSIN_G(include_blacklist)
 			s = h + 1;
 		} while (1);
 	}
+
+	/* disallow writable files */
+	if (!SUHOSIN_G(executor_include_allow_writable_files)) {
+	        /* protection against *REMOTE* attacks, potential
+	           race condition of access() is irrelevant */
+	        if (access(s, W_OK) == 0) {
+                        return SUHOSIN_CODE_TYPE_WRITABLE;
+	        }
+	}
+
 	return SUHOSIN_CODE_TYPE_GOODFILE;
 }
 
@@ -254,6 +271,11 @@ static zend_bool suhosin_zend_open(const char *filename, zend_file_handle *fh)
 			suhosin_log(S_INCLUDE, "Include filename contains an ASCIIZ character");
 			suhosin_bailout(TSRMLS_C);
 			break;
+		
+		    case SUHOSIN_CODE_TYPE_WRITABLE:
+			suhosin_log(S_INCLUDE, "Include filename ('%s') is writable by PHP process", filename);
+			suhosin_bailout(TSRMLS_C);
+			break;		    	
 
 		    case SUHOSIN_CODE_TYPE_BLACKURL:
 			suhosin_log(S_INCLUDE, "Include filename ('%s') is an URL that is forbidden by the blacklist", filename);
@@ -519,6 +541,11 @@ not_evaled_code:
 			suhosin_log(S_INCLUDE, "Include filename contains an ASCIIZ character");
 			suhosin_bailout(TSRMLS_C);
 			break;
+			
+    		case SUHOSIN_CODE_TYPE_WRITABLE:
+    		        suhosin_log(S_INCLUDE, "Include filename ('%s') is writable by PHP process", op_array->filename);
+    			suhosin_bailout(TSRMLS_C);
+    			break;		    	
 
 	    case SUHOSIN_CODE_TYPE_BLACKURL:
 			suhosin_log(S_INCLUDE, "Include filename ('%s') is an URL that is forbidden by the blacklist", op_array->filename);
@@ -755,11 +782,181 @@ int ih_mail(IH_HANDLER_PARAMS)
 	return (0);
 }
 
+#define SQLSTATE_SQL        0
+#define SQLSTATE_IDENTIFIER 1
+#define SQLSTATE_STRING     2
+#define SQLSTATE_COMMENT    3
+#define SQLSTATE_MLCOMMENT  4
+
+int ih_querycheck(IH_HANDLER_PARAMS)
+{
+#ifdef PHP_ATLEAST_5_3
+    void **p = zend_vm_stack_top(TSRMLS_C) - 1;
+#else
+	void **p = EG(argument_stack).top_element-2;
+#endif
+	unsigned long arg_count;
+	zval **arg;
+	char *query, *s, *e;
+	zval *backup;
+	int len;
+	char quote;
+	int state = SQLSTATE_SQL;
+	int cnt_union = 0, cnt_select = 0, cnt_comment = 0, cnt_opencomment = 0;
+	int mysql_extension = 0;
+
+	
+	SDEBUG("function: %s", ih->name);
+	arg_count = (unsigned long) *p;
+
+	if (ht < (long) ih->arg1) {
+		return (0);
+	}
+    
+	if ((long) ih->arg1) {
+    	    mysql_extension = 1;
+	}
+	
+	arg = (zval **) p - (arg_count - (long) ih->arg1 + 1); /* count from 0 */
+
+	backup = *arg;
+	if (Z_TYPE_P(backup) != IS_STRING) {
+		return (0);
+	}
+	len = Z_STRLEN_P(backup);
+	query = Z_STRVAL_P(backup);
+	
+	s = query;
+	e = s+len;
+	
+	while (s < e) {
+	    switch (state)
+	    {
+    		case SQLSTATE_SQL:
+    		    switch (s[0])
+    		    {
+        		case '`':
+        		    state = SQLSTATE_IDENTIFIER;
+        		    quote = '`';
+        		    break;
+        		case '\'':
+        		case '"':
+        		    state = SQLSTATE_STRING;
+        		    quote = *s;
+        		    break;
+        		case '/':
+        		    if (s[1]=='*') {
+                        if (mysql_extension == 1 && s[2] == '!') {
+                            s += 2;
+                            break;
+                        }
+            			s++;
+            			state = SQLSTATE_MLCOMMENT;
+        			    cnt_comment++;
+        		    }
+        		    break;
+    			case '-':
+        		    if (s[1]=='-') {
+        			s++;
+        			state = SQLSTATE_COMMENT;
+        			cnt_comment++;
+        		    }
+        		    break;
+    			case '#':
+        		    state = SQLSTATE_COMMENT;
+        		    cnt_comment++;
+        		    break;
+        		case 'u':
+    			case 'U':
+        		    if (strncasecmp("union", s, 5)==0) {
+            			s += 4;
+        			cnt_union++;
+        		    }
+        		    break;
+    			case 's':
+    			case 'S':
+        		    if (strncasecmp("select", s, 6)==0) {
+            			s += 5;
+        			cnt_select++;
+        		    }
+        		    break;
+    		    }
+    		    break;
+    		case SQLSTATE_STRING:
+		case SQLSTATE_IDENTIFIER:
+    		    if (s[0] == quote) {
+        		if (s[1] == quote) {
+        		    s++;
+    			} else {
+        		    state = SQLSTATE_SQL;
+    			}
+    		    }
+    		    if (s[0] == '\\') {
+    			s++;
+    		    }
+    		    break;
+		case SQLSTATE_COMMENT:
+    		    while (s[0] && s[0] != '\n') {
+    			s++;        
+    		    }
+    		    state = SQLSTATE_SQL;
+    		    break;
+    		case SQLSTATE_MLCOMMENT:
+    		    while (s[0] && (s[0] != '*' || s[1] != '/')) {
+    			s++;
+    		    }
+    		    if (s[0]) {
+    			state = SQLSTATE_SQL;
+    		    }
+    		    break;
+	    }
+	    s++;
+	}
+	if (state == SQLSTATE_MLCOMMENT) {
+	    cnt_opencomment = 1;
+	}
+	
+	if (cnt_opencomment && SUHOSIN_G(sql_opencomment)>0) {
+	    suhosin_log(S_SQL, "Open comment in SQL query: '%*s'", len, query);
+	    if (SUHOSIN_G(sql_opencomment)>1) {
+		suhosin_bailout(TSRMLS_C);
+	    }
+	}
+	
+	if (cnt_comment && SUHOSIN_G(sql_comment)>0) {
+	    suhosin_log(S_SQL, "Comment in SQL query: '%*s'", len, query);
+	    if (SUHOSIN_G(sql_comment)>1) {
+		suhosin_bailout(TSRMLS_C);
+	    }
+	}
+
+	if (cnt_union && SUHOSIN_G(sql_union)>0) {
+	    suhosin_log(S_SQL, "UNION in SQL query: '%*s'", len, query);
+	    if (SUHOSIN_G(sql_union)>1) {
+		suhosin_bailout(TSRMLS_C);
+	    }
+	}
+
+	if (cnt_select>1 && SUHOSIN_G(sql_mselect)>0) {
+	    suhosin_log(S_SQL, "Multiple SELECT in SQL query: '%*s'", len, query);
+	    if (SUHOSIN_G(sql_mselect)>1) {
+		suhosin_bailout(TSRMLS_C);
+	    }
+	}
+    
+	return (0);
+}
+
+
 int ih_fixusername(IH_HANDLER_PARAMS)
 {
+#ifdef PHP_ATLEAST_5_3
+    void **p = zend_vm_stack_top(TSRMLS_C) - 1;
+#else
 	void **p = EG(argument_stack).top_element-2;
+#endif
 	unsigned long arg_count;
-	zval **arg;char *prefix, *postfix;
+	zval **arg;char *prefix, *postfix, *user;
 	zval *backup, *my_user;
 	int prefix_len, postfix_len, len;
 	
@@ -792,37 +989,543 @@ int ih_fixusername(IH_HANDLER_PARAMS)
 	arg = (zval **) p - (arg_count - (long) ih->arg1 + 1); /* count from 0 */
 
 	backup = *arg;
-	len = Z_STRLEN_P(backup);
+	if (Z_TYPE_P(backup) != IS_STRING) {
+		user = "";
+		len = 0;
+	} else {
+		len = Z_STRLEN_P(backup);
+		user = Z_STRVAL_P(backup);
+	}
 
 	if (prefix_len && prefix_len <= len) {
-		if (strncmp(prefix, Z_STRVAL_P(backup), prefix_len)==0) {
+		if (strncmp(prefix, user, prefix_len)==0) {
 			prefix = "";
 			len -= prefix_len;
 		}
 	}
 	
 	if (postfix_len && postfix_len <= len) {
-		if (strncmp(postfix, Z_STRVAL_P(backup)+Z_STRLEN_P(backup)-len, postfix_len)==0) {
+		if (strncmp(postfix, user+len-postfix_len, postfix_len)==0) {
 			postfix = "";
 		}
 	}
 	
 	MAKE_STD_ZVAL(my_user);
 	my_user->type = IS_STRING;
-	my_user->value.str.len = spprintf(&my_user->value.str.val, 0, "%s%s%s", prefix, Z_STRVAL_P(backup), postfix);
+	my_user->value.str.len = spprintf(&my_user->value.str.val, 0, "%s%s%s", prefix, user, postfix);
 	
 	/* XXX: memory_leak? */
 	*arg = my_user;	
 	 
-	SDEBUG("function: %s - user: %s", ih->name, Z_STRVAL_PP(arg));
+	SDEBUG("function: %s - user: %s", ih->name, user);
 
 	return (0);
+}
+
+static int suhosin_php_body_write(const char *str, uint str_length TSRMLS_DC)
+{
+#define P_META_ROBOTS "<meta name=\"ROBOTS\" content=\"NOINDEX,NOFOLLOW,NOARCHIVE\" />"
+#define S_META_ROBOTS "<meta name=\"ROBOTS\" content=\"NOINDEX,FOLLOW,NOARCHIVE\" />"
+
+    SDEBUG("bw: %s", str);
+
+	if ((str_length == sizeof("</head>\n")-1) && (strcmp(str, "</head>\n")==0)) {
+		SUHOSIN_G(old_php_body_write)(S_META_ROBOTS, sizeof(S_META_ROBOTS)-1 TSRMLS_CC);
+		OG(php_body_write) = SUHOSIN_G(old_php_body_write);
+		return SUHOSIN_G(old_php_body_write)(str, str_length TSRMLS_CC);
+	} else if ((str_length == sizeof(P_META_ROBOTS)-1) && (strcmp(str, P_META_ROBOTS)==0)) {
+		return str_length;
+	}
+	return SUHOSIN_G(old_php_body_write)(str, str_length TSRMLS_CC);	
+}
+
+static int ih_phpinfo(IH_HANDLER_PARAMS)
+{
+    int argc = ZEND_NUM_ARGS();
+	long flag;
+
+	if (zend_parse_parameters(argc TSRMLS_CC, "|l", &flag) == FAILURE) {
+        RETVAL_FALSE;
+		return (1);
+	}
+
+	if(!argc) {
+		flag = PHP_INFO_ALL;
+	}
+
+	/* Andale!  Andale!  Yee-Hah! */
+	php_start_ob_buffer(NULL, 4096, 0 TSRMLS_CC);
+	if (!sapi_module.phpinfo_as_text) {
+		SUHOSIN_G(old_php_body_write) = OG(php_body_write);
+		OG(php_body_write) = suhosin_php_body_write;
+	}
+	php_print_info(flag TSRMLS_CC);
+	php_end_ob_buffer(1, 0 TSRMLS_CC);
+
+	RETVAL_TRUE;
+	return (1);
+}
+
+
+static int ih_function_exists(IH_HANDLER_PARAMS)
+{
+#ifndef PHP_ATLEAST_5_3
+	zval **function_name;
+#endif
+	zend_function *func;
+	char *lcname;
+	zend_bool retval;
+	int func_name_len;
+	
+#ifndef PHP_ATLEAST_5_3
+	if (ZEND_NUM_ARGS()!=1 || zend_get_parameters_ex(1, &function_name)==FAILURE) {
+		ZEND_WRONG_PARAM_COUNT_WITH_RETVAL(1);
+	}
+	convert_to_string_ex(function_name);
+	func_name_len = Z_STRLEN_PP(function_name);
+	lcname = estrndup(Z_STRVAL_PP(function_name), func_name_len);	
+	zend_str_tolower(lcname, func_name_len);
+#else
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s", &lcname, &func_name_len) == FAILURE) {
+		return;
+	}
+
+	/* Ignore leading "\" */
+	if (lcname[0] == '\\') {
+		lcname = &lcname[1];
+		func_name_len--;
+	}
+	lcname = zend_str_tolower_dup(lcname, func_name_len);	
+#endif
+
+	retval = (zend_hash_find(EG(function_table), lcname, func_name_len+1, (void **)&func) == SUCCESS);
+	
+	efree(lcname);
+
+	/*
+	 * A bit of a hack, but not a bad one: we see if the handler of the function
+	 * is actually one that displays "function is disabled" message.
+	 */
+	if (retval && func->type == ZEND_INTERNAL_FUNCTION &&
+		func->internal_function.handler == zif_display_disabled_function) {
+		retval = 0;
+	}
+
+	/* Now check if function is forbidden by Suhosin */
+	if (SUHOSIN_G(in_code_type) == SUHOSIN_EVAL) {
+		if (SUHOSIN_G(eval_whitelist) != NULL) {
+			if (!zend_hash_exists(SUHOSIN_G(eval_whitelist), lcname, func_name_len+1)) {
+			    retval = 0;
+			}
+		} else if (SUHOSIN_G(eval_blacklist) != NULL) {
+			if (zend_hash_exists(SUHOSIN_G(eval_blacklist), lcname, func_name_len+1)) {
+			    retval = 0;
+			}
+		}
+	}
+	
+	if (SUHOSIN_G(func_whitelist) != NULL) {
+		if (!zend_hash_exists(SUHOSIN_G(func_whitelist), lcname, func_name_len+1)) {
+		    retval = 0;
+		}
+	} else if (SUHOSIN_G(func_blacklist) != NULL) {
+		if (zend_hash_exists(SUHOSIN_G(func_blacklist), lcname, func_name_len+1)) {
+		    retval = 0;
+		}
+	}
+
+	RETVAL_BOOL(retval);
+	return (1);
+}
+
+/* MT RAND FUNCTIONS */
+
+/*
+	The following php_mt_...() functions are based on a C++ class MTRand by
+	Richard J. Wagner. For more information see the web page at
+	http://www-personal.engin.umich.edu/~wagnerr/MersenneTwister.html
+
+	Mersenne Twister random number generator -- a C++ class MTRand
+	Based on code by Makoto Matsumoto, Takuji Nishimura, and Shawn Cokus
+	Richard J. Wagner  v1.0  15 May 2003  rjwagner@writeme.com
+
+	The Mersenne Twister is an algorithm for generating random numbers.  It
+	was designed with consideration of the flaws in various other generators.
+	The period, 2^19937-1, and the order of equidistribution, 623 dimensions,
+	are far greater.  The generator is also fast; it avoids multiplication and
+	division, and it benefits from caches and pipelines.  For more information
+	see the inventors' web page at http://www.math.keio.ac.jp/~matumoto/emt.html
+
+	Reference
+	M. Matsumoto and T. Nishimura, "Mersenne Twister: A 623-Dimensionally
+	Equidistributed Uniform Pseudo-Random Number Generator", ACM Transactions on
+	Modeling and Computer Simulation, Vol. 8, No. 1, January 1998, pp 3-30.
+
+	Copyright (C) 1997 - 2002, Makoto Matsumoto and Takuji Nishimura,
+	Copyright (C) 2000 - 2003, Richard J. Wagner
+	All rights reserved.                          
+
+	Redistribution and use in source and binary forms, with or without
+	modification, are permitted provided that the following conditions
+	are met:
+
+	1. Redistributions of source code must retain the above copyright
+	   notice, this list of conditions and the following disclaimer.
+
+	2. Redistributions in binary form must reproduce the above copyright
+	   notice, this list of conditions and the following disclaimer in the
+	   documentation and/or other materials provided with the distribution.
+
+	3. The names of its contributors may not be used to endorse or promote 
+	   products derived from this software without specific prior written 
+	   permission.
+
+	THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+	"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+	LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+	A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+	CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+	EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+	PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+	PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+	LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+	NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+	SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+	The original code included the following notice:
+
+	When you use this, send an email to: matumoto@math.keio.ac.jp
+    with an appropriate reference to your work.
+
+	It would be nice to CC: rjwagner@writeme.com and Cokus@math.washington.edu
+	when you write.
+*/
+
+#define N             624                 /* length of state vector */
+#define M             (397)                /* a period parameter */
+#define hiBit(u)      ((u) & 0x80000000U)  /* mask all but highest   bit of u */
+#define loBit(u)      ((u) & 0x00000001U)  /* mask all but lowest    bit of u */
+#define loBits(u)     ((u) & 0x7FFFFFFFU)  /* mask     the highest   bit of u */
+#define mixBits(u, v) (hiBit(u)|loBits(v)) /* move hi bit of u to hi bit of v */
+
+#define twist(m,u,v)  (m ^ (mixBits(u,v)>>1) ^ ((php_uint32)(-(php_int32)(loBit(u))) & 0x9908b0dfU))
+
+/* {{{ php_mt_initialize
+ */
+static inline void suhosin_mt_initialize(php_uint32 seed, php_uint32 *state)
+{
+	/* Initialize generator state with seed
+	   See Knuth TAOCP Vol 2, 3rd Ed, p.106 for multiplier.
+	   In previous versions, most significant bits (MSBs) of the seed affect
+	   only MSBs of the state array.  Modified 9 Jan 2002 by Makoto Matsumoto. */
+
+	register php_uint32 *s = state;
+	register php_uint32 *r = state;
+	register int i = 1;
+
+	*s++ = seed & 0xffffffffU;
+	for( ; i < N; ++i ) {
+		*s++ = ( 1812433253U * ( *r ^ (*r >> 30) ) + i ) & 0xffffffffU;
+		r++;
+	}
+}
+/* }}} */
+
+static inline void suhosin_mt_init_by_array(php_uint32 *key, int keylen, php_uint32 *state)
+{
+    int i, j, k;
+    suhosin_mt_initialize(19650218U, state);
+    i = 1; j = 0;
+    k = (N > keylen ? N : keylen);
+    for (; k; k--) {
+        state[i] = (state[i] ^ ((state[i-1] ^ (state[i-1] >> 30)) * 1664525U)) + key[j] + j;
+        i++; j = (j+1) % keylen;
+        if (i >= N) { state[0] = state[N-1]; i=1; }
+    }
+    for (k=N-1; k; k--) {
+        state[i] = (state[i] ^ ((state[i-1] ^ (state[i-1] >> 30)) * 1566083941U)) - i;
+        i++;
+        if (i >= N) { state[0] = state[N-1]; i=1; }
+    }
+    state[0] = 0x80000000U;
+}
+/* }}} */
+
+
+/* {{{ suhosin_mt_reload
+ */
+static inline void suhosin_mt_reload(php_uint32 *state, php_uint32 **next, int *left)
+{
+	/* Generate N new values in state
+	   Made clearer and faster by Matthew Bellew (matthew.bellew@home.com) */
+
+	register php_uint32 *p = state;
+	register int i;
+
+	for (i = N - M; i--; ++p)
+		*p = twist(p[M], p[0], p[1]);
+	for (i = M; --i; ++p)
+		*p = twist(p[M-N], p[0], p[1]);
+	*p = twist(p[M-N], p[0], state[0]);
+	*left = N;
+	*next = state;
+}
+/* }}} */
+
+/* {{{ suhosin_mt_srand
+ */
+static void suhosin_mt_srand(php_uint32 seed TSRMLS_DC)
+{
+	/* Seed the generator with a simple uint32 */
+	suhosin_mt_initialize(seed, SUHOSIN_G(mt_state));
+	suhosin_mt_reload(SUHOSIN_G(mt_state), &SUHOSIN_G(mt_next), &SUHOSIN_G(mt_left));
+
+	/* Seed only once */
+	SUHOSIN_G(mt_is_seeded) = 1;
+}
+/* }}} */
+
+/* {{{ suhosin_mt_rand
+ */
+static php_uint32 suhosin_mt_rand(TSRMLS_D)
+{
+	/* Pull a 32-bit integer from the generator state
+	   Every other access function simply transforms the numbers extracted here */
+	
+	register php_uint32 s1;
+
+	if (SUHOSIN_G(mt_left) == 0) {
+    	suhosin_mt_reload(SUHOSIN_G(mt_state), &SUHOSIN_G(mt_next), &SUHOSIN_G(mt_left));
+	}
+	--SUHOSIN_G(mt_left);
+		
+	s1 = *SUHOSIN_G(mt_next)++;
+	s1 ^= (s1 >> 11);
+	s1 ^= (s1 <<  7) & 0x9d2c5680U;
+	s1 ^= (s1 << 15) & 0xefc60000U;
+	return ( s1 ^ (s1 >> 18) );
+}
+/* }}} */
+
+/* {{{ suhosin_gen_entropy
+ */
+static void suhosin_gen_entropy(php_uint32 *seedbuf TSRMLS_DC)
+{
+    /* On a modern OS code, stack and heap base are randomized */
+    unsigned long code_value  = (unsigned long)suhosin_gen_entropy;
+    unsigned long stack_value = (unsigned long)&code_value;
+    unsigned long heap_value  = (unsigned long)SUHOSIN_G(r_state);
+    suhosin_SHA256_CTX   context;
+    int fd;
+    
+    code_value ^= code_value >> 32;
+    stack_value ^= stack_value >> 32;
+    heap_value ^= heap_value >> 32;
+    
+    seedbuf[0] = code_value;
+    seedbuf[1] = stack_value;
+    seedbuf[2] = heap_value;
+    seedbuf[3] = time(0);
+#ifdef PHP_WIN32
+    seedbuf[4] = GetCurrentProcessId();
+#else
+    seedbuf[4] = getpid();
+#endif
+    seedbuf[5] = (php_uint32) 0x7fffffff * php_combined_lcg(TSRMLS_C);
+
+#ifndef PHP_WIN32
+    fd = VCWD_OPEN("/dev/urandom", O_RDONLY);
+    if (fd >= 0) {
+        /* ignore error case - if urandom doesn't give us any/enough random bytes */
+        read(fd, &seedbuf[6], 2 * sizeof(php_uint32));
+        close(fd);
+    }
+#endif
+
+    suhosin_SHA256Init(&context);
+	suhosin_SHA256Update(&context, (void *) seedbuf, sizeof(php_uint32) * 8);
+	suhosin_SHA256Final(seedbuf, &context);
+}
+/* }}} */
+
+
+/* {{{ suhosin_srand_auto
+ */
+static void suhosin_srand_auto(TSRMLS_D)
+{
+    php_uint32 seed[8];    
+    suhosin_gen_entropy(&seed[0] TSRMLS_CC);
+
+	suhosin_mt_init_by_array(seed, 8, SUHOSIN_G(r_state));
+	suhosin_mt_reload(SUHOSIN_G(r_state), &SUHOSIN_G(r_next), &SUHOSIN_G(r_left));
+
+	/* Seed only once */
+	SUHOSIN_G(r_is_seeded) = 1;
+}
+/* }}} */
+
+/* {{{ suhosin_mt_srand_auto
+ */
+static void suhosin_mt_srand_auto(TSRMLS_D)
+{
+    php_uint32 seed[8];    
+    suhosin_gen_entropy(&seed[0] TSRMLS_CC);
+
+	suhosin_mt_init_by_array(seed, 8, SUHOSIN_G(mt_state));
+	suhosin_mt_reload(SUHOSIN_G(mt_state), &SUHOSIN_G(mt_next), &SUHOSIN_G(mt_left));
+
+	/* Seed only once */
+	SUHOSIN_G(mt_is_seeded) = 1;
+}
+/* }}} */
+
+
+/* {{{ suhosin_srand
+ */
+static void suhosin_srand(php_uint32 seed TSRMLS_DC)
+{
+	/* Seed the generator with a simple uint32 */
+	suhosin_mt_initialize(seed+0x12345, SUHOSIN_G(r_state));
+	suhosin_mt_reload(SUHOSIN_G(r_state), &SUHOSIN_G(r_next), &SUHOSIN_G(r_left));
+
+	/* Seed only once */
+	SUHOSIN_G(r_is_seeded) = 1;
+}
+/* }}} */
+
+/* {{{ suhosin_mt_rand
+ */
+static php_uint32 suhosin_rand(TSRMLS_D)
+{
+	/* Pull a 32-bit integer from the generator state
+	   Every other access function simply transforms the numbers extracted here */
+	
+	register php_uint32 s1;
+
+	if (SUHOSIN_G(r_left) == 0) {
+    	suhosin_mt_reload(SUHOSIN_G(r_state), &SUHOSIN_G(r_next), &SUHOSIN_G(r_left));
+	}
+	--SUHOSIN_G(r_left);
+		
+	s1 = *SUHOSIN_G(r_next)++;
+	s1 ^= (s1 >> 11);
+	s1 ^= (s1 <<  7) & 0x9d2c5680U;
+	s1 ^= (s1 << 15) & 0xefc60000U;
+	return ( s1 ^ (s1 >> 18) );
+}
+/* }}} */
+
+static int ih_srand(IH_HANDLER_PARAMS)
+{
+    int argc = ZEND_NUM_ARGS();
+	long seed;
+
+	if (zend_parse_parameters(argc TSRMLS_CC, "|l", &seed) == FAILURE || SUHOSIN_G(srand_ignore)) {
+    	return (1);
+    }
+
+    if (argc == 0) {
+        suhosin_srand_auto(TSRMLS_C);
+    } else {
+        suhosin_srand(seed TSRMLS_CC);
+    }
+	return (1);
+}
+
+static int ih_mt_srand(IH_HANDLER_PARAMS)
+{
+    int argc = ZEND_NUM_ARGS();
+	long seed;
+
+	if (zend_parse_parameters(argc TSRMLS_CC, "|l", &seed) == FAILURE || SUHOSIN_G(mt_srand_ignore)) {
+    	return (1);
+    }
+    
+    if (argc == 0) {
+        suhosin_mt_srand_auto(TSRMLS_C);
+    } else {
+        suhosin_mt_srand(seed TSRMLS_CC);
+    }
+	return (1);
+}
+
+static int ih_mt_rand(IH_HANDLER_PARAMS)
+{
+    int argc = ZEND_NUM_ARGS();
+    long min;
+	long max;
+	long number;
+
+	if (argc != 0 && zend_parse_parameters(argc TSRMLS_CC, "ll", &min, &max) == FAILURE) {
+	    return (1);        
+	}
+
+	if (!SUHOSIN_G(mt_is_seeded)) {
+		suhosin_mt_srand_auto(TSRMLS_C);
+	}
+
+	number = (long) (suhosin_mt_rand(TSRMLS_C) >> 1);
+	if (argc == 2) {
+		RAND_RANGE(number, min, max, PHP_MT_RAND_MAX);
+	}
+
+	RETVAL_LONG(number);
+        return (1);
+}
+
+static int ih_rand(IH_HANDLER_PARAMS)
+{
+    int argc = ZEND_NUM_ARGS();
+    long min;
+	long max;
+	long number;
+
+	if (argc != 0 && zend_parse_parameters(argc TSRMLS_CC, "ll", &min, &max) == FAILURE) {
+	    return (1);        
+	}
+
+	if (!SUHOSIN_G(r_is_seeded)) {
+		suhosin_srand_auto(TSRMLS_C);
+	}
+
+	number = (long) (suhosin_rand(TSRMLS_C) >> 1);
+	if (argc == 2) {
+		RAND_RANGE(number, min, max, PHP_MT_RAND_MAX);
+	}
+
+	RETVAL_LONG(number);
+        return (1);
+}
+
+static int ih_getrandmax(IH_HANDLER_PARAMS)
+{
+#ifdef PHP_ATLEAST_5_3
+	if (zend_parse_parameters_none() == FAILURE) {
+		return;
+	}
+#else
+        int argc = ZEND_NUM_ARGS();
+
+        if (argc != 0) {
+		ZEND_WRONG_PARAM_COUNT_WITH_RETVAL(1);
+        }
+#endif    
+	RETVAL_LONG(PHP_MT_RAND_MAX);
+	return (1);
 }
 
 internal_function_handler ihandlers[] = {
     { "preg_replace", ih_preg_replace, NULL, NULL, NULL },
     { "mail", ih_mail, NULL, NULL, NULL },
     { "symlink", ih_symlink, NULL, NULL, NULL },
+    { "phpinfo", ih_phpinfo, NULL, NULL, NULL },
+	
+	{ "srand", ih_srand, NULL, NULL, NULL },
+	{ "mt_srand", ih_mt_srand, NULL, NULL, NULL },
+	{ "rand", ih_rand, NULL, NULL, NULL },
+	{ "mt_rand", ih_mt_rand, NULL, NULL, NULL },
+	{ "getrandmax", ih_getrandmax, NULL, NULL, NULL },
+	{ "mt_getrandmax", ih_getrandmax, NULL, NULL, NULL },
 	
     { "ocilogon", ih_fixusername, (void *)1, NULL, NULL },
     { "ociplogon", ih_fixusername, (void *)1, NULL, NULL },
@@ -834,6 +1537,8 @@ internal_function_handler ihandlers[] = {
     { "fbsql_change_user", ih_fixusername, (void *)1, NULL, NULL },
     { "fbsql_connect", ih_fixusername, (void *)2, NULL, NULL },
     { "fbsql_pconnect", ih_fixusername, (void *)2, NULL, NULL },
+    
+    { "function_exists", ih_function_exists, NULL, NULL, NULL },
 	
     { "ifx_connect", ih_fixusername, (void *)2, NULL, NULL },
     { "ifx_pconnect", ih_fixusername, (void *)2, NULL, NULL },
@@ -850,6 +1555,15 @@ internal_function_handler ihandlers[] = {
     { "mssql_connect", ih_fixusername, (void *)2, NULL, NULL },
     { "mssql_pconnect", ih_fixusername, (void *)2, NULL, NULL },
 
+    { "mysql_query", ih_querycheck, (void *)1, (void *)1, NULL },
+    { "mysql_db_query", ih_querycheck, (void *)2, (void *)1, NULL },
+    { "mysql_unbuffered_query", ih_querycheck, (void *)1, (void *)1, NULL },
+    { "mysqli_query", ih_querycheck, (void *)2, (void *)1, NULL },
+    { "mysqli_real_query", ih_querycheck, (void *)2, (void *)1, NULL },
+    { "mysqli_send_query", ih_querycheck, (void *)2, (void *)1, NULL },
+    { "mysqli_master_query", ih_querycheck, (void *)2, (void *)1, NULL },
+    { "mysqli_slave_query", ih_querycheck, (void *)2, (void *)1, NULL },
+
     { "mysqli", ih_fixusername, (void *)2, NULL, NULL },
     { "mysql_connect", ih_fixusername, (void *)2, NULL, NULL },
     { "mysql_pconnect", ih_fixusername, (void *)2, NULL, NULL },
@@ -858,20 +1572,44 @@ internal_function_handler ihandlers[] = {
     { NULL, NULL, NULL, NULL, NULL }
 };
 
+#define FUNCTION_WARNING() zend_error(E_WARNING, "%s() has been disabled for security reasons", get_active_function_name(TSRMLS_C));
+#define FUNCTION_SIMULATE_WARNING() zend_error(E_WARNING, "SIMULATION - %s() has been disabled for security reasons", get_active_function_name(TSRMLS_C));
 
 /* {{{ void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int return_value_used TSRMLS_DC)
  *    This function provides a hook for internal execution */
 static void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int return_value_used TSRMLS_DC)
 {
 	char *lcname;
-	int function_name_strlen;
+	int function_name_strlen, free_lcname = 0;
 	zval *return_value;
+	zend_class_entry *ce = NULL;
 	int ht;
 	internal_function_handler *ih;
-	
+
+#ifdef ZEND_ENGINE_2
+	ce = ((zend_internal_function *) execute_data_ptr->function_state.function)->scope;
+#endif
 	lcname = ((zend_internal_function *) execute_data_ptr->function_state.function)->function_name;
 	function_name_strlen = strlen(lcname);
+	
+	/* handle methodcalls correctly */
+	if (ce != NULL) {
+		char *tmp = (char *) emalloc(function_name_strlen + 2 + ce->name_length + 1);
+		memcpy(tmp, ce->name, ce->name_length);
+		memcpy(tmp+ce->name_length, "::", 2);
+		memcpy(tmp+ce->name_length+2, lcname, function_name_strlen);
+		lcname = tmp;
+		free_lcname = 1;
+		function_name_strlen += ce->name_length + 2;
+		lcname[function_name_strlen] = 0;
+		zend_str_tolower(lcname, function_name_strlen);
+	}
+	
+#ifdef ZEND_ENGINE_2  
 	return_value = (*(temp_variable *)((char *) execute_data_ptr->Ts + execute_data_ptr->opline->result.u.var)).var.ptr;
+#else
+        return_value = execute_data_ptr->Ts[execute_data_ptr->opline->result.u.var].var.ptr;
+#endif
 	ht = execute_data_ptr->opline->extended_value;
 
 	SDEBUG("function: %s", lcname);
@@ -880,32 +1618,53 @@ static void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int re
 	
 		if (SUHOSIN_G(eval_whitelist) != NULL) {
 			if (!zend_hash_exists(SUHOSIN_G(eval_whitelist), lcname, function_name_strlen+1)) {
-			    suhosin_log(S_EXECUTOR, "function outside of eval whitelist called: %s()", lcname);
-			    suhosin_bailout(TSRMLS_C);
+				suhosin_log(S_EXECUTOR, "function outside of eval whitelist called: %s()", lcname);
+				if (!SUHOSIN_G(simulation)) {
+				        goto execute_internal_bailout;
+        			} else {
+        			        FUNCTION_SIMULATE_WARNING()
+				}
 			}
 		} else if (SUHOSIN_G(eval_blacklist) != NULL) {
 			if (zend_hash_exists(SUHOSIN_G(eval_blacklist), lcname, function_name_strlen+1)) {
-			    suhosin_log(S_EXECUTOR, "function within eval blacklist called: %s()", lcname);
-			    suhosin_bailout(TSRMLS_C);
+				suhosin_log(S_EXECUTOR, "function within eval blacklist called: %s()", lcname);
+				if (!SUHOSIN_G(simulation)) {
+				        goto execute_internal_bailout;
+        			} else {
+        			        FUNCTION_SIMULATE_WARNING()
+				}
 			}
 		}
 	}
 	
 	if (SUHOSIN_G(func_whitelist) != NULL) {
 		if (!zend_hash_exists(SUHOSIN_G(func_whitelist), lcname, function_name_strlen+1)) {
-		    suhosin_log(S_EXECUTOR, "function outside of whitelist called: %s()", lcname);
-		    suhosin_bailout(TSRMLS_C);
+			suhosin_log(S_EXECUTOR, "function outside of whitelist called: %s()", lcname);
+			if (!SUHOSIN_G(simulation)) {
+			        goto execute_internal_bailout;
+			} else {
+			        FUNCTION_SIMULATE_WARNING()
+			}
 		}
 	} else if (SUHOSIN_G(func_blacklist) != NULL) {
 		if (zend_hash_exists(SUHOSIN_G(func_blacklist), lcname, function_name_strlen+1)) {
-		    suhosin_log(S_EXECUTOR, "function within blacklist called: %s()", lcname);
-		    suhosin_bailout(TSRMLS_C);
+			suhosin_log(S_EXECUTOR, "function within blacklist called: %s()", lcname);
+			if (!SUHOSIN_G(simulation)) {
+			        goto execute_internal_bailout;
+			} else {
+			        FUNCTION_SIMULATE_WARNING()
+			}
 		}
 	}
 	
 	if (zend_hash_find(&ihandler_table, lcname, function_name_strlen+1, (void **)&ih) == SUCCESS) {
 	
-		int retval = ih->handler(IH_HANDLER_PARAM_PASSTHRU);
+		int retval = 0;
+		void *handler = ((zend_internal_function *) execute_data_ptr->function_state.function)->handler;
+		
+		if (handler != ZEND_FN(display_disabled_function)) {
+		    retval = ih->handler(IH_HANDLER_PARAM_PASSTHRU);
+		}
 		
 		if (retval == 0) {
 			old_execute_internal(execute_data_ptr, return_value_used TSRMLS_CC);
@@ -913,6 +1672,16 @@ static void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int re
 	} else {
 		old_execute_internal(execute_data_ptr, return_value_used TSRMLS_CC);
 	}
+	if (free_lcname == 1) {
+		efree(lcname);
+	}
+	return;
+execute_internal_bailout:
+	if (free_lcname == 1) {
+		efree(lcname);
+	}
+	FUNCTION_WARNING()
+	suhosin_bailout(TSRMLS_C);
 }
 /* }}} */
 
@@ -924,8 +1693,12 @@ static int function_lookup(zend_extension *extension)
 	if (zo_set_oe_ex != NULL) {
 		return ZEND_HASH_APPLY_STOP;
 	}
+    
+    if (extension->handle != NULL) {
 
-	zo_set_oe_ex = (void *)DL_FETCH_SYMBOL(extension->handle, "zend_optimizer_set_oe_ex");
+	    zo_set_oe_ex = (void *)DL_FETCH_SYMBOL(extension->handle, "zend_optimizer_set_oe_ex");
+    
+    }
 
 	return 0;
 }
