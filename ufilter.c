@@ -2,7 +2,8 @@
   +----------------------------------------------------------------------+
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
-  | Copyright (c) 2006 The Hardened-PHP Project                          |
+  | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
+  | Copyright (c) 2007-2012 SektionEins GmbH                             |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -12,11 +13,11 @@
   | obtain it through the world-wide-web, please send a note to          |
   | license@php.net so we can mail you a copy immediately.               |
   +----------------------------------------------------------------------+
-  | Author: Stefan Esser <sesser@hardened-php.net>                       |
+  | Author: Stefan Esser <sesser@sektioneins.de>                         |
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: ufilter.c,v 1.10 2006-10-25 21:38:00 sesser Exp $ 
+  $Id: ufilter.c,v 1.1.1.1 2007-11-28 01:15:35 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H

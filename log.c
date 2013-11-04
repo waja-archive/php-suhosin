@@ -2,7 +2,8 @@
   +----------------------------------------------------------------------+
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
-  | Copyright (c) 2006 The Hardened-PHP Project                          |
+  | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
+  | Copyright (c) 2007-2012 SektionEins GmbH                             |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -12,11 +13,11 @@
   | obtain it through the world-wide-web, please send a note to          |
   | license@php.net so we can mail you a copy immediately.               |
   +----------------------------------------------------------------------+
-  | Author: Stefan Esser <sesser@hardened-php.net>                       |
+  | Author: Stefan Esser <sesser@sektioneins.de>                         |
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: log.c,v 1.14 2006-10-08 10:23:56 sesser Exp $ 
+  $Id: log.c,v 1.1.1.1 2007-11-28 01:15:35 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -26,7 +27,10 @@
 #include "php.h"
 #include "php_ini.h"
 #include "php_suhosin.h"
+#include <fcntl.h>
 #include "SAPI.h"
+#include "ext/standard/datetime.h"
+#include "ext/standard/flock_compat.h"
 
 #ifdef HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
@@ -75,9 +79,19 @@ static char *loglevel2string(int loglevel)
 	}
 }
 
+static char *month_names[] = {
+	"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+	"Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+};
+
 PHP_SUHOSIN_API void suhosin_log(int loglevel, char *fmt, ...)
 {
-	int s, r, i=0;
+	int s, r, i=0, fd;
+	long written, towrite;
+	char *wbuf;
+	struct timeval tv;
+	time_t now;
+	struct tm tm;
 #if defined(AF_UNIX)
 	struct sockaddr_un saun;
 #endif
@@ -104,12 +118,12 @@ PHP_SUHOSIN_API void suhosin_log(int loglevel, char *fmt, ...)
 	}
 	
 	if (SUHOSIN_G(log_use_x_forwarded_for)) {
-		ip_address = sapi_getenv("HTTP_X_FORWARDED_FOR", 20 TSRMLS_CC);
+		ip_address = suhosin_getenv("HTTP_X_FORWARDED_FOR", 20 TSRMLS_CC);
 		if (ip_address == NULL) {
 			ip_address = "X-FORWARDED-FOR not set";
 		}
 	} else {
-		ip_address = sapi_getenv("REMOTE_ADDR", 11 TSRMLS_CC);
+		ip_address = suhosin_getenv("REMOTE_ADDR", 11 TSRMLS_CC);
 		if (ip_address == NULL) {
 			ip_address = "REMOTE_ADDR not set";
 		}
@@ -140,7 +154,7 @@ PHP_SUHOSIN_API void suhosin_log(int loglevel, char *fmt, ...)
 		}
 		ap_php_snprintf(buf, sizeof(buf), "%s - %s (attacker '%s', file '%s', line %u)", alertstring, error, ip_address, fname, lineno);
 	} else {
-		fname = sapi_getenv("SCRIPT_FILENAME", 15 TSRMLS_CC);
+		fname = suhosin_getenv("SCRIPT_FILENAME", 15 TSRMLS_CC);
 		if (fname==NULL) {
 			fname = "unknown";
 		}
@@ -149,7 +163,7 @@ PHP_SUHOSIN_API void suhosin_log(int loglevel, char *fmt, ...)
 			
 	/* Syslog-Logging disabled? */
 	if (((SUHOSIN_G(log_syslog)|S_INTERNAL) & loglevel)==0) {
-		goto log_sapi;
+		goto log_file;
 	}	
 	
 #if defined(AF_UNIX)
@@ -157,7 +171,7 @@ PHP_SUHOSIN_API void suhosin_log(int loglevel, char *fmt, ...)
 
 	s = socket(AF_UNIX, SOCK_DGRAM, 0);
 	if (s == -1) {
-		goto log_sapi;
+		goto log_file;
 	}
 	
 	memset(&saun, 0, sizeof(saun));
@@ -170,7 +184,7 @@ PHP_SUHOSIN_API void suhosin_log(int loglevel, char *fmt, ...)
 		close(s);
     		s = socket(AF_UNIX, SOCK_STREAM, 0);
 		if (s == -1) {
-			goto log_sapi;
+			goto log_file;
 		}
 	
 		memset(&saun, 0, sizeof(saun));
@@ -181,7 +195,7 @@ PHP_SUHOSIN_API void suhosin_log(int loglevel, char *fmt, ...)
 		r = connect(s, (struct sockaddr *)&saun, sizeof(saun));
 		if (r) { 
 			close(s);
-			goto log_sapi;
+			goto log_file;
 		}
 	}
 	send(s, error, strlen(error), 0);
@@ -210,6 +224,39 @@ PHP_SUHOSIN_API void suhosin_log(int loglevel, char *fmt, ...)
 	ReportEvent(log_source, etype, (unsigned short) SUHOSIN_G(log_syslog_priority), evid, NULL, 1, 0, strs, NULL);
 	
 #endif
+log_file:
+	/* File-Logging disabled? */
+	if ((SUHOSIN_G(log_file) & loglevel)==0) {
+		goto log_sapi;
+	}
+	
+	if (!SUHOSIN_G(log_filename) || !SUHOSIN_G(log_filename)[0]) {
+		goto log_sapi;
+	}
+	fd = open(SUHOSIN_G(log_filename), O_CREAT|O_APPEND|O_WRONLY, 0640);
+	if (fd == -1) {
+	    suhosin_log(S_INTERNAL, "Unable to open logfile: %s", SUHOSIN_G(log_filename));
+	    return;
+	}
+
+	gettimeofday(&tv, NULL);
+	now = tv.tv_sec;
+	php_gmtime_r(&now, &tm);
+	ap_php_snprintf(error, sizeof(error), "%s %2d %02d:%02d:%02d [%u] %s\n", month_names[tm.tm_mon], tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, getpid(),buf);
+	towrite = strlen(error);
+	wbuf = error;
+	php_flock(fd, LOCK_EX);
+	while (towrite > 0) {
+		written = write(fd, wbuf, towrite);
+		if (written < 0) {
+			break;
+		}
+		towrite -= written;
+		wbuf += written;
+	}
+	php_flock(fd, LOCK_UN);
+	close(fd);
+
 log_sapi:
 	/* SAPI Logging activated? */
 	SDEBUG("(suhosin_log) log_syslog: %u - log_sapi: %u - log_script: %u - log_phpscript: %u", SUHOSIN_G(log_syslog), SUHOSIN_G(log_sapi), SUHOSIN_G(log_script), SUHOSIN_G(log_phpscript));

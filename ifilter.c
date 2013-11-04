@@ -2,7 +2,8 @@
   +----------------------------------------------------------------------+
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
-  | Copyright (c) 2006 The Hardened-PHP Project                          |
+  | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
+  | Copyright (c) 2007-2012 SektionEins GmbH                             |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -12,11 +13,11 @@
   | obtain it through the world-wide-web, please send a note to          |
   | license@php.net so we can mail you a copy immediately.               |
   +----------------------------------------------------------------------+
-  | Author: Stefan Esser <sesser@hardened-php.net>                       |
+  | Author: Stefan Esser <sesser@sektioneins.de>                         |
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: ifilter.c,v 1.7 2006-11-06 16:24:59 sesser Exp $ 
+  $Id: ifilter.c,v 1.1.1.1 2007-11-28 01:15:35 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -114,6 +115,91 @@ void normalize_varname(char *varname)
 }
 /* }}} */
 
+static unsigned char suhosin_hexchars[] = "0123456789ABCDEF";
+
+static const char suhosin_is_dangerous_char[256] = {
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+};
+
+/* {{{ suhosin_server_encode
+ */
+static void suhosin_server_strip(HashTable *arr, char *key, int klen)
+{
+	zval **tzval;
+	unsigned char *s, *t;
+
+	if (zend_hash_find(arr, key, klen, (void **) &tzval) == SUCCESS &&
+			Z_TYPE_PP(tzval) == IS_STRING) {
+		
+		s = t = Z_STRVAL_PP(tzval);
+		for (; *t; t++) {
+			if (suhosin_is_dangerous_char[*t]) {
+				*t = '?';
+			}
+		}
+		Z_STRLEN_PP(tzval) = t-s;
+	}
+}
+/* }}} */
+
+/* {{{ suhosin_server_encode
+ */
+static void suhosin_server_encode(HashTable *arr, char *key, int klen)
+{
+	zval **tzval;
+	unsigned char *temp = NULL, *t, *newv, *n;
+	int extra = 0;
+
+	if (zend_hash_find(arr, key, klen, (void **) &tzval) == SUCCESS &&
+			Z_TYPE_PP(tzval) == IS_STRING) {
+		
+		temp = Z_STRVAL_PP(tzval);
+		
+		t = temp;
+		for (t = temp; *t; t++) {
+			if (suhosin_is_dangerous_char[*t]) {
+				extra += 2;
+			}
+		}
+		
+		/* no extra bytes required */
+		if (extra == 0) {
+			return;
+		}
+		
+		n = newv = emalloc(t - temp + 1 + extra);
+		t = temp;
+		for (t = temp; *t; t++, n++) {
+			if (suhosin_is_dangerous_char[*t]) {
+				*n++ = '%';
+				*n++ = suhosin_hexchars[*t >> 4];
+				*n = suhosin_hexchars[*t & 15];
+			} else {
+				*n = *t;
+			}
+		}
+		*n = 0;
+		
+		Z_STRVAL_PP(tzval) = newv;
+		Z_STRLEN_PP(tzval) = n-newv;
+	}
+}
+/* }}} */
 
 /* {{{ suhosin_register_server_variables
  */
@@ -151,7 +237,7 @@ void suhosin_register_server_variables(zval *track_vars_array TSRMLS_DC)
 		retval+= zend_hash_exists(svars, "HTTP_SERVER_VARS", sizeof("HTTP_SERVER_VARS"));
 		retval+= zend_hash_exists(svars, "HTTP_SESSION_VARS", sizeof("HTTP_SESSION_VARS"));
 		retval+= zend_hash_exists(svars, "HTTP_POST_FILES", sizeof("HTTP_POST_FILES"));
-		retval+= zend_hash_exists(svars, "HTTP_RAW_POST_DATAS", sizeof("HTTP_RAW_POST_DATA"));
+		retval+= zend_hash_exists(svars, "HTTP_RAW_POST_DATA", sizeof("HTTP_RAW_POST_DATA"));
 		if (retval > 0) failure = 1;
 	}
         
@@ -172,9 +258,55 @@ void suhosin_register_server_variables(zval *track_vars_array TSRMLS_DC)
 		zend_hash_update(svars, "HTTP_COOKIE", sizeof("HTTP_COOKIE"), (void **)&z, sizeof(zval *), NULL);
 		SUHOSIN_G(decrypted_cookie) = NULL;
 	}
+	
+	if (SUHOSIN_G(server_encode)) {
+		/* suhosin_server_encode(svars, "argv", sizeof("argv")); */
+		suhosin_server_encode(svars, "REQUEST_URI", sizeof("REQUEST_URI"));
+		suhosin_server_encode(svars, "QUERY_STRING", sizeof("QUERY_STRING"));
+	}
+	if (SUHOSIN_G(server_strip)) {
+		suhosin_server_strip(svars, "PHP_SELF", sizeof("PHP_SELF"));
+		suhosin_server_strip(svars, "PATH_INFO", sizeof("PATH_INFO"));
+		suhosin_server_strip(svars, "PATH_TRANSLATED", sizeof("PATH_TRANSLATED"));
+	}
 }
 /* }}} */
 
+
+#ifdef ZEND_ENGINE_2
+	/* Old Input filter */
+	unsigned int (*old_input_filter)(int arg, char *var, char **val, unsigned int val_len, unsigned int *new_val_len TSRMLS_DC) = NULL;
+
+/* {{{ suhosin_input_filter_wrapper
+ */
+unsigned int suhosin_input_filter_wrapper(int arg, char *var, char **val, unsigned int val_len, unsigned int *new_val_len TSRMLS_DC)
+{
+	zend_bool already_scanned = SUHOSIN_G(already_scanned);
+	SUHOSIN_G(already_scanned) = 0;
+	
+	if (SUHOSIN_G(do_not_scan)) {
+		if (new_val_len) {
+			*new_val_len = val_len;
+		}
+                return 1;
+	}
+	
+	if (!already_scanned) {
+		if (suhosin_input_filter(arg, var, val, val_len, new_val_len TSRMLS_CC)==0) {
+			SUHOSIN_G(abort_request)=1;
+			return 0;
+		}
+		if (new_val_len) {
+			val_len = *new_val_len;
+		}
+	}
+	if (old_input_filter) {
+		return old_input_filter(arg, var, val, val_len, new_val_len TSRMLS_CC);
+	} else {
+		return 1;
+	}
+}
+#endif
 
 /* {{{ suhosin_input_filter
  */
@@ -182,6 +314,9 @@ unsigned int suhosin_input_filter(int arg, char *var, char **val, unsigned int v
 {
 	char *index, *prev_index = NULL;
 	unsigned int var_len, total_len, depth = 0;
+
+	/* Mark that we were called */
+	SUHOSIN_G(already_scanned) = 1;
 
 	if (new_val_len) {
 		*new_val_len = 0;
@@ -210,18 +345,8 @@ unsigned int suhosin_input_filter(int arg, char *var, char **val, unsigned int v
 	                }
                         return 1;
         }
-        if (SUHOSIN_G(no_more_variables)) {
-                return 0;
-        }
         
         /* Drop this variable if the limit is now reached */
-	if (SUHOSIN_G(max_request_variables) && SUHOSIN_G(max_request_variables) <= SUHOSIN_G(cur_request_variables)) {
-		suhosin_log(S_VARS, "configured request variable limit exceeded - dropped variable '%s'", var);
-		if (!SUHOSIN_G(simulation)) {
-            		SUHOSIN_G(no_more_variables) = 1;
-			return 0;
-		}
-	}
 	switch (arg) {
 	    case PARSE_GET:
 			if (SUHOSIN_G(max_get_vars) && SUHOSIN_G(max_get_vars) <= SUHOSIN_G(cur_get_vars)) {
@@ -252,6 +377,41 @@ unsigned int suhosin_input_filter(int arg, char *var, char **val, unsigned int v
 			break;
 	}
 	
+	/* Drop this variable if it begins with whitespace which is disallowed */
+	if (*var == ' ') {
+		if (SUHOSIN_G(disallow_ws)) {
+			suhosin_log(S_VARS, "request variable name begins with disallowed whitespace - dropped variable '%s'", var);
+			if (!SUHOSIN_G(simulation)) {
+				return 0;
+			}
+		}
+		switch (arg) {
+		    case PARSE_GET:
+			    if (SUHOSIN_G(disallow_get_ws)) {
+				    suhosin_log(S_VARS, "GET variable name begins with disallowed whitespace - dropped variable '%s'", var);
+				    if (!SUHOSIN_G(simulation)) {
+					    return 0;
+				    }
+			    }
+			    break;
+		    case PARSE_POST:
+			    if (SUHOSIN_G(disallow_post_ws)) {
+				    suhosin_log(S_VARS, "POST variable name begins with disallowed whitespace - dropped variable '%s'", var);
+				    if (!SUHOSIN_G(simulation)) {
+					    return 0;
+				    }
+			    }
+			    break;
+		    case PARSE_COOKIE:
+			    if (SUHOSIN_G(disallow_cookie_ws)) {
+				    suhosin_log(S_VARS, "COOKIE variable name begins with disallowed whitespace - dropped variable '%s'", var);
+				    if (!SUHOSIN_G(simulation)) {
+					    return 0;
+				    }
+			    }
+			    break;
+		}
+	}
 	
 	/* Drop this variable if it exceeds the value length limit */
 	if (SUHOSIN_G(max_value_length) && SUHOSIN_G(max_value_length) < val_len) {
@@ -552,8 +712,10 @@ protected_varname:
  */
 void suhosin_hook_register_server_variables()
 {
-	orig_register_server_variables = sapi_module.register_server_variables;
-	sapi_module.register_server_variables = suhosin_register_server_variables;
+	if (sapi_module.register_server_variables) {
+		orig_register_server_variables = sapi_module.register_server_variables;
+		sapi_module.register_server_variables = suhosin_register_server_variables;
+	}
 }
 /* }}} */
 
