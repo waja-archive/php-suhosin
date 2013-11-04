@@ -1,4 +1,4 @@
-dnl $Id: config.m4,v 1.1.1.1 2007-11-28 01:15:35 sesser Exp $
+dnl $Id: config.m4,v 1.4 2006-11-20 15:51:45 sesser Exp $
 dnl config.m4 for extension suhosin
 
 PHP_ARG_ENABLE(suhosin, whether to enable suhosin support,

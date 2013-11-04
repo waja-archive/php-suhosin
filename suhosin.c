@@ -2,8 +2,7 @@
   +----------------------------------------------------------------------+
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
-  | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007 SektionEins GmbH                                  |
+  | Copyright (c) 2006 The Hardened-PHP Project                          |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -13,11 +12,11 @@
   | obtain it through the world-wide-web, please send a note to          |
   | license@php.net so we can mail you a copy immediately.               |
   +----------------------------------------------------------------------+
-  | Author: Stefan Esser <sesser@sektioneins.de>                         |
+  | Author: Stefan Esser <sesser@hardened-php.net>                       |
   +----------------------------------------------------------------------+
 */
 
-/* $Id: suhosin.c,v 1.2 2007-11-28 16:01:50 sesser Exp $ */
+/* $Id: suhosin.c,v 1.45 2007-05-15 08:08:23 sesser Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -60,9 +59,9 @@ static void suhosin_op_array_dtor(zend_op_array *op_array);
 STATIC zend_extension suhosin_zend_extension_entry = {
 	"Suhosin",
 	SUHOSIN_EXT_VERSION,
-	"SektionEins GmbH",
+	"Hardened-PHP Project",
 	"http://www.suhosin.org",
-	"Copyright (c) 2007",
+	"Copyright (c) 2002-2006",
 	suhosin_module_startup,
 	suhosin_shutdown,
 	NULL,
@@ -202,6 +201,7 @@ static void suhosin_shutdown(zend_extension *extension)
 }
 
 
+
 static int suhosin_startup_wrapper(zend_extension *ext)
 {
 	int res;
@@ -255,7 +255,7 @@ static int suhosin_startup_wrapper(zend_extension *ext)
 /*static zend_extension_version_info extension_version_info = { ZEND_EXTENSION_API_NO, ZEND_VERSION, ZTS_V, ZEND_DEBUG };*/
 
 #define PERDIR_CHECK(upper, lower) \
-    if (!SUHOSIN_G(lower ## _perdir) && stage == ZEND_INI_STAGE_HTACCESS) { \
+    if (!SUHOSIN_G(lower ## _perdir) && stage == ZEND_INI_STAGE_ACTIVATE) { \
         return FAILURE; \
     } 
 
@@ -271,11 +271,11 @@ static int suhosin_startup_wrapper(zend_extension *ext)
 
 #define ZEND_INI_MH_PASSTHRU entry, new_value, new_value_length, mh_arg1, mh_arg2, mh_arg3, stage TSRMLS_CC
 
-
 static ZEND_INI_MH(OnUpdateSuhosin_perdir)
 {
         char *tmp;
 
+	LOG_PERDIR_CHECK()
 	if (SUHOSIN_G(perdir)) {
     		pefree(SUHOSIN_G(perdir), 1);
 	}
@@ -875,7 +875,6 @@ PHP_INI_BEGIN()
 	STD_ZEND_INI_BOOLEAN("suhosin.coredump",		"0",		ZEND_INI_SYSTEM,	OnUpdateBool, coredump,	zend_suhosin_globals,	suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.stealth",		"1",		ZEND_INI_SYSTEM,	OnUpdateBool, stealth,	zend_suhosin_globals,	suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.apc_bug_workaround",		"0",		ZEND_INI_SYSTEM,	OnUpdateBool, apc_bug_workaround,	zend_suhosin_globals,	suhosin_globals)
-	STD_ZEND_INI_BOOLEAN("suhosin.disable.display_errors",		"0",		ZEND_INI_SYSTEM,	OnUpdateBool, disable_display_errors,	zend_suhosin_globals,	suhosin_globals)
 	
 	
 
@@ -947,10 +946,6 @@ PHP_INI_BEGIN()
 	STD_PHP_INI_ENTRY("suhosin.cookie.checkraddr", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, cookie_checkraddr, zend_suhosin_globals, suhosin_globals)	
 	ZEND_INI_ENTRY("suhosin.cookie.cryptlist",	NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdate_cookie_cryptlist)
 	ZEND_INI_ENTRY("suhosin.cookie.plainlist",	NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdate_cookie_plainlist)
-
-
-	STD_ZEND_INI_BOOLEAN("suhosin.server.encode", "1", ZEND_INI_SYSTEM, OnUpdateBool, server_encode,zend_suhosin_globals,	suhosin_globals)
-	STD_ZEND_INI_BOOLEAN("suhosin.server.strip", "1", ZEND_INI_SYSTEM, OnUpdateBool, server_strip,zend_suhosin_globals,	suhosin_globals)
 
 PHP_INI_END()
 /* }}} */
@@ -1038,17 +1033,6 @@ PHP_MINIT_FUNCTION(suhosin)
 	/* and register the rest of the ini entries */
 	REGISTER_INI_ENTRIES();
 	
-	/* Force display_errors=off */
-	if (SUHOSIN_G(disable_display_errors)) {
-		zend_ini_entry *i;
-		if (zend_hash_find(EG(ini_directives), "display_errors", sizeof("display_errors"), (void **) &i) == SUCCESS) {
-			if (i->on_modify) {
-				i->on_modify(i, "0", sizeof("0"), i->mh_arg1, i->mh_arg2, i->mh_arg3, ZEND_INI_STAGE_STARTUP TSRMLS_CC);
-				i->on_modify = NULL;
-			}
-		}
-	}
-	
 	/* Load invisible to other Zend Extensions */
 	if (zend_llist_count(&zend_extensions)==0 || SUHOSIN_G(stealth)==0) {
 		zend_extension extension;
@@ -1071,14 +1055,6 @@ PHP_MINIT_FUNCTION(suhosin)
 	/* register the logo for phpinfo */
 	php_register_info_logo(SUHOSIN_LOGO_GUID, "image/jpeg", suhosin_logo, sizeof(suhosin_logo));
 
-#if PHP_MAJOR_VERSION > 5 || (PHP_MAJOR_VERSION == 5 && PHP_MINOR_VERSION >= 1)
-	/* perform LFS check */
-/*	time_t check = sapi_get_request_time(TSRMLS_C);
-	if (SG(global_request_time) != check) {
-	    zend_error(E_ERROR, "It seems that PHP and Suhosin were compiled with different binary layouts. "
-	    "This will cause problems like POST not working. Please tell your distributor to fix this.");
-	}*/
-#endif
 	return SUCCESS;
 }
 /* }}} */
@@ -1162,7 +1138,7 @@ PHP_MINFO_FUNCTION(suhosin)
 	php_info_print_box_start(0);
 	if (!sapi_module.phpinfo_as_text) {
 		if (PG(expose_php)) {
-			PUTS("<a href=\"http://www.suhosin.org/\"><img border=\"0\" src=\"");
+			PUTS("<a href=\"http://www.hardened-php.net/suhosin/index.html\"><img border=\"0\" src=\"");
 			if (SG(request_info).request_uri) {
 				char *elem_esc = php_info_html_esc(SG(request_info).request_uri TSRMLS_CC);
 				PUTS(elem_esc);
@@ -1187,7 +1163,7 @@ PHP_MINFO_FUNCTION(suhosin)
 			if (strstr(Z_STRVAL_PP(agent_name), "Gecko") == NULL && strstr(Z_STRVAL_PP(agent_name), "Opera") == NULL) {
 			    break;
 			}
-			PUTS("<a href=\"http://www.suhosin.org/\"><img border=\"0\" src=\"data:image/jpeg;base64,");
+			PUTS("<a href=\"http://www.hardened-php.net/suhosin/index.html\"><img border=\"0\" src=\"data:image/jpeg;base64,");
 			enc_logo=(char *)php_base64_encode(suhosin_logo, sizeof(suhosin_logo), &ret);
 			if (enc_logo) {
 				PUTS(enc_logo);
@@ -1199,11 +1175,9 @@ PHP_MINFO_FUNCTION(suhosin)
 	PUTS("This server is protected with the Suhosin Extension " SUHOSIN_EXT_VERSION);
 	PUTS(!sapi_module.phpinfo_as_text?"<br /><br />":"\n\n");
 	if (sapi_module.phpinfo_as_text) {
-		PUTS("Copyright (c) 2006-2007 Hardened-PHP Project\n");
-		PUTS("Copyright (c) 2007 SektionEins GmbH\n");
+		PUTS("Copyright (c) 2006 Hardened-PHP Project\n");
 	} else {
-		PUTS("Copyright (c) 2006-2007 <a href=\"http://www.hardened-php.net/\">Hardened-PHP Project</a><br />\n");
-		PUTS("Copyright (c) 2007 <a href=\"http://www.sektioneins.de/\">SektionEins GmbH</a>\n");
+		PUTS("Copyright (c) 2006 <a href=\"http://www.hardened-php.net/\">Hardened-PHP Project</a>\n");
 	}
 	php_info_print_box_end();
 

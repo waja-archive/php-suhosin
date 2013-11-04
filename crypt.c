@@ -2,8 +2,7 @@
   +----------------------------------------------------------------------+
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
-  | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007 SektionEins GmbH                                  |
+  | Copyright (c) 2006 The Hardened-PHP Project                          |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -13,11 +12,11 @@
   | obtain it through the world-wide-web, please send a note to          |
   | license@php.net so we can mail you a copy immediately.               |
   +----------------------------------------------------------------------+
-  | Author: Stefan Esser <sesser@sektioneins.de>                         |
+  | Author: Stefan Esser <sesser@hardened-php.net>                       |
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: crypt.c,v 1.1.1.1 2007-11-28 01:15:35 sesser Exp $ 
+  $Id: crypt.c,v 1.3 2007-05-19 21:31:56 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -100,7 +99,6 @@ static PHP_FUNCTION(suhosin_crypt)
 	}
 
 	/* The automatic salt generation only covers standard DES and md5-crypt */
-/*	DO NOT TRY TO ENFORCE A BLOWFISH SALT THIS COULD BREAK SCRIPTS
 	if(!*salt) {
 		char randat[16];
 		int i;
@@ -109,7 +107,6 @@ static PHP_FUNCTION(suhosin_crypt)
 		
 		suhosin_crypt_gensalt_blowfish_rn(5, randat, sizeof(randat), salt, sizeof(salt));
 	}
-*/
 	
 	if (salt[0] == '$' &&
 	    salt[1] == '2' &&

@@ -1,17 +1,3 @@
-2007-12-01 - 0.9.22
-
-    - Removed LFS warning message because it crashed on several systems
-
-2007-11-30 - 0.9.21
-
-    - Fixed function_exists() now checks the Suhosin permissions
-    - Fixed crypt() salt no longer uses Blowfish by default
-    - Fixed .htaccess/perdir support
-    - Fixed compilation problem on OS/X
-    - Added protection against some attacks through _SERVER variables
-    - Added suhosin.server.strip and suhosin.server.encode
-    - Added error message that warns about the LFS binary incompatibility
-    
 2007-05-19 - 0.9.20
 
     - Added protection flags against whitespace at variable start
