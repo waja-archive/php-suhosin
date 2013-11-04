@@ -23,6 +23,6 @@ suhosin.log.sapi=2
 15M
 16M
 17M
-ALERT - script tried to increase memory_limit to %d bytes which is above the allowed value (attacker 'REMOTE_ADDR not set', file '%s', line 7)
+ALERT - script tried to increase memory_limit to 18874368 bytes which is above the allowed value (attacker 'REMOTE_ADDR not set', file '%s', line 7)
 17M
 

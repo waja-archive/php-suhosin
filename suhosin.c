@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: suhosin.c,v 1.41 2007-03-04 10:22:54 sesser Exp $ */
+/* $Id: suhosin.c,v 1.38 2006-12-02 22:53:27 root Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -319,15 +319,6 @@ static ZEND_INI_MH(OnUpdateSuhosin_log_phpscript)
 		SUHOSIN_G(log_phpscript) = S_ALL & ~S_MEMORY;
 	} else {
 		SUHOSIN_G(log_phpscript) = atoi(new_value) & (~S_MEMORY) & (~S_INTERNAL);
-	}
-	return SUCCESS;
-}
-static ZEND_INI_MH(OnUpdateSuhosin_log_file)
-{
-	if (!new_value) {
-		SUHOSIN_G(log_file) = S_ALL & ~S_MEMORY;
-	} else {
-		SUHOSIN_G(log_file) = atoi(new_value) & (~S_MEMORY) & (~S_INTERNAL);
 	}
 	return SUCCESS;
 }
@@ -714,8 +705,6 @@ static zend_ini_entry shared_ini_entries[] = {
 	STD_ZEND_INI_BOOLEAN("suhosin.log.use-x-forwarded-for",	"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, log_use_x_forwarded_for,	zend_suhosin_globals,	suhosin_globals)
 	ZEND_INI_ENTRY("suhosin.log.phpscript",			"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateSuhosin_log_phpscript)
 	STD_ZEND_INI_ENTRY("suhosin.log.phpscript.name",			NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateString, log_phpscriptname, zend_suhosin_globals, suhosin_globals)
-	ZEND_INI_ENTRY("suhosin.log.file",			"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateSuhosin_log_file)
-	STD_ZEND_INI_ENTRY("suhosin.log.file.name",		NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateString, log_filename, zend_suhosin_globals, suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.log.phpscript.is_safe",			"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, log_phpscript_is_safe,	zend_suhosin_globals,	suhosin_globals)
 ZEND_INI_END()
  
@@ -788,10 +777,6 @@ PHP_INI_BEGIN()
         STD_PHP_INI_ENTRY("suhosin.filter.action", NULL, PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateString, filter_action, zend_suhosin_globals, suhosin_globals)
         STD_PHP_INI_ENTRY("suhosin.sql.user_prefix", NULL, PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateString, sql_user_prefix, zend_suhosin_globals, suhosin_globals)
         STD_PHP_INI_ENTRY("suhosin.sql.user_postfix", NULL, PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateString, sql_user_postfix, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.sql.comment", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, sql_comment, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.sql.opencomment", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, sql_opencomment, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.sql.multiselect", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, sql_mselect, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.sql.union", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, sql_union, zend_suhosin_globals, suhosin_globals)
     
 	STD_ZEND_INI_BOOLEAN("suhosin.session.encrypt",		"1",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, session_encrypt,	zend_suhosin_globals,	suhosin_globals)
 	STD_PHP_INI_ENTRY("suhosin.session.cryptkey", "", PHP_INI_ALL, OnUpdateString, session_cryptkey, zend_suhosin_globals, suhosin_globals)
