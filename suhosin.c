@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: suhosin.c,v 1.34 2006-11-22 09:57:26 sesser Exp $ */
+/* $Id: suhosin.c,v 1.33 2006-11-20 15:50:30 sesser Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -919,9 +919,7 @@ PHP_MINFO_FUNCTION(suhosin)
 			int ret;
 			zval **agent_name;
 			
-#ifdef ZEND_ENGINE_2
 			zend_is_auto_global("_SERVER", sizeof("_SERVER")-1 TSRMLS_CC);
-#endif
 			if (!PG(http_globals)[TRACK_VARS_SERVER] || 
 			    zend_hash_find(PG(http_globals)[TRACK_VARS_SERVER]->value.ht, "HTTP_USER_AGENT", sizeof("HTTP_USER_AGENT"), (void **) &agent_name)==FAILURE) {
 			    break;

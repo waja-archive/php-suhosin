@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 /*
-  $Id: header.c,v 1.9 2006-11-22 09:57:26 sesser Exp $ 
+  $Id: header.c,v 1.8 2006-10-25 21:38:00 sesser Exp $ 
 */
 
 #ifdef HAVE_CONFIG_H
@@ -40,16 +40,14 @@ char *suhosin_encrypt_single_cookie(char *name, int name_len, char *value, int v
 	char *buf = buffer, *buf2 = buffer2, *d, *d_url;
     int l;
 
-	if (name_len > sizeof(buffer)-2) {
+	if (strlen(name) > sizeof(buffer)-2) {
 		buf = estrndup(name, name_len);
 	} else {
 		memcpy(buf, name, name_len);
 		buf[name_len] = 0;
 	}
 	
-	name_len = php_url_decode(buf, name_len);
-    normalize_varname(buf);
-    name_len = strlen(buf);
+	name_len = php_url_decode(name, name_len);
 	
 	if (SUHOSIN_G(cookie_plainlist)) {
 		if (zend_hash_exists(SUHOSIN_G(cookie_plainlist), buf, name_len+1)) {
@@ -90,20 +88,17 @@ char *suhosin_decrypt_single_cookie(char *name, int name_len, char *value, int v
 {
 	char buffer[4096];
     char buffer2[4096];
-    int o_name_len = name_len;
 	char *buf = buffer, *buf2 = buffer2, *d, *d_url;
 	int l;
 
-	if (name_len > sizeof(buffer)-2) {
+	if (strlen(name) > sizeof(buffer)-2) {
 		buf = estrndup(name, name_len);
 	} else {
 		memcpy(buf, name, name_len);
 		buf[name_len] = 0;
 	}
 	
-	name_len = php_url_decode(buf, name_len);
-    normalize_varname(buf);
-    name_len = strlen(buf);
+	name_len = php_url_decode(name, name_len);
 	
 	if (SUHOSIN_G(cookie_plainlist)) {
 		if (zend_hash_exists(SUHOSIN_G(cookie_plainlist), buf, name_len+1)) {
@@ -111,9 +106,6 @@ decrypt_return_plain:
 			if (buf != buffer) {
 				efree(buf);
 			}
-            memcpy(*where, name, o_name_len);
-            *where += o_name_len;
-            **where = '='; *where +=1;
 	        memcpy(*where, value, value_len);
 	        *where += value_len;
 			return *where;
@@ -135,24 +127,17 @@ decrypt_return_plain:
 	value_len = php_url_decode(buf2, value_len);
 	
 	d = suhosin_decrypt_string(buf2, value_len, buf, name_len, key, &l, SUHOSIN_G(cookie_checkraddr) TSRMLS_CC);
-    if (d == NULL) {
-        goto skip_cookie;
-    }
 	d_url = php_url_encode(d, l, &l);
 	efree(d);
-    memcpy(*where, name, o_name_len);
-    *where += o_name_len;
-    **where = '=';*where += 1;
-	memcpy(*where, d_url, l);
-	*where += l;
-	efree(d_url);
-skip_cookie:
 	if (buf != buffer) {
 		efree(buf);
 	}
 	if (buf2 != buffer2) {
 		efree(buf2);
 	}
+	memcpy(*where, d_url, l);
+	*where += l;
+	efree(d_url);
 	return *where;
 }
 
@@ -173,7 +158,7 @@ char *suhosin_cookie_decryptor(TSRMLS_D)
 
 	suhosin_generate_key(SUHOSIN_G(cookie_cryptkey), SUHOSIN_G(cookie_cryptua), SUHOSIN_G(cookie_cryptdocroot), SUHOSIN_G(cookie_cryptraddr), (char *)&cryptkey TSRMLS_CC);
 
-	ret = decrypted = emalloc(strlen(raw_cookie)*4+1);
+	ret = decrypted = emalloc(strlen(raw_cookie)*3+1);
 	raw_cookie = estrdup(raw_cookie);
     SUHOSIN_G(raw_cookie) = estrdup(raw_cookie);
 
@@ -186,8 +171,8 @@ char *suhosin_cookie_decryptor(TSRMLS_D)
 		while (*tmp && *tmp != ';' && *tmp != '=') tmp++;
 		
 		varlen = tmp-var;
-		/*memcpy(decrypted, var, varlen);
-		decrypted += varlen;*/
+		memcpy(decrypted, var, varlen);
+		decrypted += varlen;
 		if (*tmp == 0) break;
 		
 		if (*tmp++ == ';') {
@@ -195,7 +180,7 @@ char *suhosin_cookie_decryptor(TSRMLS_D)
 			continue;
 		}
 		
-		/**decrypted++ = '=';*/
+		*decrypted++ = '=';
 		
 		val = tmp;
 		while (*tmp && *tmp != ';') tmp++;
@@ -296,7 +281,7 @@ int suhosin_header_handler(sapi_header_struct *sapi_header, sapi_headers_struct 
 		
                 len = sizeof("Set-Cookie: ")-1 + nlen + 1 + vlen + rend-end;
                 tmp = emalloc(len + 1);
-                tlen = sprintf(tmp, "Set-Cookie: %.*s=%s", nlen,name, value);
+                tlen = sprintf(tmp, "Set-Cookie: %s=%s", name, value);
                 memcpy(tmp + tlen, end, rend-end);
                 tmp[len] = 0;
 
