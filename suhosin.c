@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: suhosin.c,v 1.38 2006-12-02 22:53:27 root Exp $ */
+/* $Id: suhosin.c,v 1.34 2006-11-22 09:57:26 sesser Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -47,12 +47,6 @@ static int suhosin_module_startup(zend_extension *extension);
 static void suhosin_shutdown(zend_extension *extension);
 
 
-static void (*orig_op_array_ctor)(zend_op_array *op_array) = NULL;
-static void (*orig_op_array_dtor)(zend_op_array *op_array) = NULL;
-static void (*orig_module_shutdown)(zend_extension *extension) = NULL;
-static int (*orig_module_startup)(zend_extension *extension) = NULL;
-
-
 static void suhosin_op_array_ctor(zend_op_array *op_array);
 static void suhosin_op_array_dtor(zend_op_array *op_array);
 
@@ -61,7 +55,8 @@ STATIC zend_extension suhosin_zend_extension_entry = {
 	SUHOSIN_EXT_VERSION,
 	"Hardened-PHP Project",
 	"http://www.suhosin.org",
-	"Copyright (c) 2002-2006",
+	"(C) Copyright 2006",
+	
 	suhosin_module_startup,
 	suhosin_shutdown,
 	NULL,
@@ -94,48 +89,12 @@ static void suhosin_op_array_ctor(zend_op_array *op_array)
 	}
 }
 
-
-
 static void suhosin_op_array_dtor(zend_op_array *op_array)
 {
 	if (suhosin_zend_extension_entry.resource_number != -1) {
 		op_array->reserved[suhosin_zend_extension_entry.resource_number] = NULL;
 	}
 }
-
-/* Stealth Mode functions */
-
-static void stealth_op_array_ctor(zend_op_array *op_array)
-{
-	if (orig_op_array_ctor != NULL) {
-        orig_op_array_ctor(op_array);
-    }
-	suhosin_op_array_ctor(op_array);
-}
-
-static void stealth_op_array_dtor(zend_op_array *op_array)
-{
-	if (orig_op_array_dtor != NULL) {
-	    orig_op_array_dtor(op_array);
-    }
-	suhosin_op_array_dtor(op_array);
-}
-
-static int stealth_module_startup(zend_extension *extension)
-{
-	int r = orig_module_startup == NULL ? SUCCESS : orig_module_startup(extension);
-	suhosin_module_startup(extension);
-    return r;
-}
-
-static void stealth_module_shutdown(zend_extension *extension)
-{
-	if (orig_module_shutdown != NULL) {
-	    orig_module_shutdown(extension);
-    }
-	suhosin_shutdown(extension);
-}
-
 
 static int suhosin_module_startup(zend_extension *extension)
 {
@@ -153,19 +112,14 @@ static int suhosin_module_startup(zend_extension *extension)
 		    zend_extension ext;
 		    ext = suhosin_zend_extension_entry;
 		    ext.handle = module_entry_ptr->handle;
-		    /*
 		    zend_llist_add_element(&zend_extensions, &ext);
 		    extension = zend_llist_get_last(&zend_extensions);
-		    */
-		    extension = &suhosin_zend_extension_entry;
 		}
 		module_entry_ptr->handle = NULL;
 
 	} else {
 		return FAILURE;
 	}
-
-
 
 	if (SUHOSIN_G(apc_bug_workaround)) {
 		resid = zend_get_resource_handle(extension);
@@ -190,14 +144,6 @@ static void suhosin_shutdown(zend_extension *extension)
 {
 	suhosin_unhook_execute();
 	suhosin_unhook_header_handler();
-    
-    if (ze != NULL) {
-	    ze->startup = orig_module_startup;
-	    ze->shutdown = orig_module_shutdown;
-	    ze->op_array_ctor = orig_op_array_ctor;
-	    ze->op_array_dtor = orig_op_array_dtor;
-    }
-    
 }
 
 
@@ -206,9 +152,8 @@ static int suhosin_startup_wrapper(zend_extension *ext)
 {
 	int res;
 	zend_extension *ex = &suhosin_zend_extension_entry;
-	char *new_info;
-	int new_info_length;
-	TSRMLS_FETCH();
+    char *new_info;
+    int new_info_length;
 	
 	/* Ugly but working hack */
 	new_info_length = sizeof("%s\n    with %s v%s, %s, by %s\n")
@@ -222,32 +167,10 @@ static int suhosin_startup_wrapper(zend_extension *ext)
 	sprintf(new_info, "%s\n    with %s v%s, %s, by %s", ext->author, ex->name, ex->version, ex->copyright, ex->author);
 	ext->author = new_info;
 
+	
 	ze->startup = old_startup;
-	
-	/* Stealth Mode */
-	orig_module_startup = ze->startup;
-	orig_module_shutdown = ze->shutdown;
-	orig_op_array_ctor = ze->op_array_ctor;
-	orig_op_array_dtor = ze->op_array_dtor;
-
-    /*if (SUHOSIN_G(stealth) != 0) {*/
-	    ze->startup = stealth_module_startup;
-	    ze->shutdown = stealth_module_shutdown;
-	    ze->op_array_ctor = stealth_op_array_ctor;
-	    ze->op_array_dtor = stealth_op_array_dtor;
-    /*}*/
-	
 	res = old_startup(ext);
-
-/*    ex->name = NULL; 
-    ex->author = NULL;
-    ex->copyright = NULL;
-    ex->version = NULL;*/
-
-    /*zend_extensions.head=NULL;*/
-
 	suhosin_module_startup(NULL);
-    
 	
 	return res;
 }
@@ -728,8 +651,6 @@ PHP_INI_BEGIN()
 	STD_ZEND_INI_BOOLEAN("suhosin.simulation",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, simulation,	zend_suhosin_globals,	suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.protectkey",		"1",		ZEND_INI_SYSTEM,	OnUpdateBool, protectkey,	zend_suhosin_globals,	suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.coredump",		"0",		ZEND_INI_SYSTEM,	OnUpdateBool, coredump,	zend_suhosin_globals,	suhosin_globals)
-	STD_ZEND_INI_BOOLEAN("suhosin.stealth",		"1",		ZEND_INI_SYSTEM,	OnUpdateBool, stealth,	zend_suhosin_globals,	suhosin_globals)
-    
 	STD_ZEND_INI_BOOLEAN("suhosin.apc_bug_workaround",		"0",		ZEND_INI_SYSTEM,	OnUpdateBool, apc_bug_workaround,	zend_suhosin_globals,	suhosin_globals)
 	
 	STD_ZEND_INI_ENTRY("suhosin.mail.protect",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateLong, mailprotect,	zend_suhosin_globals,	suhosin_globals)
@@ -883,12 +804,11 @@ PHP_MINIT_FUNCTION(suhosin)
 	REGISTER_INI_ENTRIES();
 	
 	/* Load invisible to other Zend Extensions */
-	if (zend_llist_count(&zend_extensions)==0 || SUHOSIN_G(stealth)==0) {
+	if (zend_llist_count(&zend_extensions)==0) {
 		zend_extension extension;
 		extension = suhosin_zend_extension_entry;
 		extension.handle = NULL;
 		zend_llist_add_element(&zend_extensions, &extension);
-        ze = NULL;
 	} else {
 		ze = (zend_extension *)zend_llist_get_last_ex(&zend_extensions, &lp);
 		old_startup = ze->startup;
@@ -1013,7 +933,7 @@ PHP_MINFO_FUNCTION(suhosin)
 			    break;
 			}
 			PUTS("<a href=\"http://www.hardened-php.net/suhosin/index.html\"><img border=\"0\" src=\"data:image/jpeg;base64,");
-			enc_logo=(char *)php_base64_encode(suhosin_logo, sizeof(suhosin_logo), &ret);
+			enc_logo=php_base64_encode(suhosin_logo, sizeof(suhosin_logo), &ret);
 			if (enc_logo) {
 				PUTS(enc_logo);
 				efree(enc_logo);

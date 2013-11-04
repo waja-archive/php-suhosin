@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: execute.c,v 1.38 2006-12-02 22:56:06 root Exp $ */
+/* $Id: execute.c,v 1.36 2006-11-28 19:36:36 sesser Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -842,8 +842,7 @@ static int ih_phpinfo(IH_HANDLER_PARAMS)
 	long flag;
 
 	if (zend_parse_parameters(argc TSRMLS_CC, "|l", &flag) == FAILURE) {
-        RETVAL_FALSE;
-		return (1);
+		return;
 	}
 
 	if(!argc) {
@@ -951,12 +950,7 @@ static void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int re
 	
 	if (zend_hash_find(&ihandler_table, lcname, function_name_strlen+1, (void **)&ih) == SUCCESS) {
 	
-		int retval = 0;
-		void *handler = ((zend_internal_function *) execute_data_ptr->function_state.function)->handler;
-		
-		if (handler != ZEND_FN(display_disabled_function)) {
-		    retval = ih->handler(IH_HANDLER_PARAM_PASSTHRU);
-		}
+		int retval = ih->handler(IH_HANDLER_PARAM_PASSTHRU);
 		
 		if (retval == 0) {
 			old_execute_internal(execute_data_ptr, return_value_used TSRMLS_CC);
