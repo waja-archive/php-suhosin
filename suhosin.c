@@ -847,10 +847,10 @@ static zend_ini_entry shared_ini_entries[] = {
 	ZEND_INI_ENTRY("suhosin.log.file",			"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateSuhosin_log_file)
 	STD_ZEND_INI_ENTRY("suhosin.log.file.name",		NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateLogString, log_filename, zend_suhosin_globals, suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.log.phpscript.is_safe",			"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateLogBool, log_phpscript_is_safe,	zend_suhosin_globals,	suhosin_globals)
+	ZEND_INI_ENTRY("suhosin.perdir",		"0",		ZEND_INI_SYSTEM,	OnUpdateSuhosin_perdir)
 ZEND_INI_END()
  
 PHP_INI_BEGIN()
-    ZEND_INI_ENTRY("suhosin.perdir",		"0",		ZEND_INI_SYSTEM,	OnUpdateSuhosin_perdir)
 	STD_ZEND_INI_ENTRY("suhosin.executor.include.max_traversal",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateExecLong, executor_include_max_traversal,	zend_suhosin_globals,	suhosin_globals)
 	ZEND_INI_ENTRY("suhosin.executor.include.whitelist",	NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdate_include_whitelist)
 	ZEND_INI_ENTRY("suhosin.executor.include.blacklist",	NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdate_include_blacklist)
@@ -951,9 +951,6 @@ PHP_INI_BEGIN()
 
 	STD_ZEND_INI_BOOLEAN("suhosin.server.encode", "1", ZEND_INI_SYSTEM, OnUpdateBool, server_encode,zend_suhosin_globals,	suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.server.strip", "1", ZEND_INI_SYSTEM, OnUpdateBool, server_strip,zend_suhosin_globals,	suhosin_globals)
-
-	STD_ZEND_INI_BOOLEAN("suhosin.srand.ignore", "1", ZEND_INI_SYSTEM|ZEND_INI_PERDIR, OnUpdateMiscBool, srand_ignore,zend_suhosin_globals,	suhosin_globals)
-	STD_ZEND_INI_BOOLEAN("suhosin.mt_srand.ignore", "1", ZEND_INI_SYSTEM|ZEND_INI_PERDIR, OnUpdateMiscBool, mt_srand_ignore,zend_suhosin_globals,	suhosin_globals)
 
 PHP_INI_END()
 /* }}} */
@@ -1203,10 +1200,10 @@ PHP_MINFO_FUNCTION(suhosin)
 	PUTS(!sapi_module.phpinfo_as_text?"<br /><br />":"\n\n");
 	if (sapi_module.phpinfo_as_text) {
 		PUTS("Copyright (c) 2006-2007 Hardened-PHP Project\n");
-		PUTS("Copyright (c) 2007-2008 SektionEins GmbH\n");
+		PUTS("Copyright (c) 2007 SektionEins GmbH\n");
 	} else {
 		PUTS("Copyright (c) 2006-2007 <a href=\"http://www.hardened-php.net/\">Hardened-PHP Project</a><br />\n");
-		PUTS("Copyright (c) 2007-2008 <a href=\"http://www.sektioneins.de/\">SektionEins GmbH</a>\n");
+		PUTS("Copyright (c) 2007 <a href=\"http://www.sektioneins.de/\">SektionEins GmbH</a>\n");
 	}
 	php_info_print_box_end();
 

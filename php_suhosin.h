@@ -22,7 +22,7 @@
 #ifndef PHP_SUHOSIN_H
 #define PHP_SUHOSIN_H
 
-#define SUHOSIN_EXT_VERSION  "0.9.27"
+#define SUHOSIN_EXT_VERSION  "0.9.24"
 
 /*#define SUHOSIN_DEBUG*/
 #define SUHOSIN_LOG "/tmp/suhosin_log.txt"
@@ -63,8 +63,6 @@ PHP_MSHUTDOWN_FUNCTION(suhosin);
 PHP_RINIT_FUNCTION(suhosin);
 PHP_RSHUTDOWN_FUNCTION(suhosin);
 PHP_MINFO_FUNCTION(suhosin);
-
-#include "ext/standard/basic_functions.h"
 
 ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	zend_uint in_code_type;
@@ -223,18 +221,6 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	zend_bool	server_strip;
 	
 	zend_bool	disable_display_errors;
-
-	php_uint32   r_state[625];
-	php_uint32   *r_next;
-	int          r_left;
-    zend_bool    srand_ignore;
-    zend_bool    mt_srand_ignore;
-	php_uint32   mt_state[625];
-	php_uint32   *mt_next;
-	int          mt_left;
-
-	zend_bool r_is_seeded; 
-	zend_bool mt_is_seeded;
 
 	/* PERDIR Handling */
         char *perdir;
@@ -398,10 +384,6 @@ static zend_always_inline zend_bool zval_unset_isref_p(zval* pz) {
 static zend_always_inline zend_bool zval_set_isref_to_p(zval* pz, zend_bool isref) {
 	return pz->is_ref = isref;
 }
-
-#else
-
-#define PHP_ATLEAST_5_3   true
 
 #endif
 
