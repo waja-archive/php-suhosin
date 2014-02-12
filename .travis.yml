@@ -5,6 +5,7 @@ install:
     - sudo apt-get install -qq --no-install-recommends libwww-perl devscripts
     - uscan --force-download --rename
     - sudo apt-get purge -qq libwww-perl
+    - apt-get autoremove
     - sudo apt-get install -qq --no-install-recommends devscripts debhelper php5-dev dpatch
 
 script:
