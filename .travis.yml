@@ -2,7 +2,7 @@ language: c
 
 install:
     - sudo apt-get update -qq
-    - sudo apt-get install -qq --no-install-recommends debhelper php5-dev dpatch
+    - sudo apt-get install -qq --no-install-recommends devscripts debhelper php5-dev dpatch
 
 script:
     - debuild -uc -us
