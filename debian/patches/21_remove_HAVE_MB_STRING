@@ -1,5 +1,4 @@
-#! /bin/sh /usr/share/dpatch/dpatch-run
-## 21_remove_HAVE_MB_STRING.dpatch by Jan Wagner <waja@cyconet.org>
+## 21_remove_HAVE_MB_STRING by Jan Wagner <waja@cyconet.org>
 ##
 ## From e8beb4f50fa997c0ea4b923677deb275cc7660e8 Mon Sep 17 00:00:00 2001
 ## From: Jan Ingvoldstad <frettled@gmail.com>

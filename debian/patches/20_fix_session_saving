@@ -1,5 +1,4 @@
-#! /bin/sh /usr/share/dpatch/dpatch-run
-## 20_fix_session_saving.dpatch by Jan Wagner <waja@cyconet.org>
+## 20_fix_session_saving by Jan Wagner <waja@cyconet.org>
 ##
 ## From e7dfd0bc820e59cd8abd2e36b0320cfceb9701a8 Mon Sep 17 00:00:00 2001
 ## From: Stefan Esser <stefan.esser@sektioneins.de>
