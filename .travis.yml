@@ -3,7 +3,7 @@ language: c
 install:
     - sudo apt-get update -qq
     - sudo apt-get install -qq --no-install-recommends libwww-perl devscripts
-    - uscan --rename
+    - uscan --force-download --rename
     - sudo apt-get purge -qq libwww-perl
     - sudo apt-get install -qq --no-install-recommends devscripts debhelper php5-dev dpatch
 
