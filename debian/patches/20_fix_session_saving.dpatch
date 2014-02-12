@@ -1,21 +1,25 @@
 #! /bin/sh /usr/share/dpatch/dpatch-run
 ## 20_fix_session_saving.dpatch by Jan Wagner <waja@cyconet.org>
 ##
-## From 117b6aa6efec61afaa1431c698dad8eb553b55f5 Mon Sep 17 00:00:00 2001
-## From: Olivier Blin <dev@blino.org>
-## Date: Sun, 31 Mar 2013 01:15:48 +0100
-## Subject: [PATCH] Fix saving sessions in PHP 5.4 with user session handlers (fix #12)
+## From e7dfd0bc820e59cd8abd2e36b0320cfceb9701a8 Mon Sep 17 00:00:00 2001
+## From: Stefan Esser <stefan.esser@sektioneins.de>
+## Date: Tue, 11 Feb 2014 12:27:53 +0100
+## Subject: [PATCH] Fix problem with user space session handlers (including test
+## case)
 ##
 ## When session storage functions are set with session_set_save_handler()
 ## (this is the "mod_user" mode), mod_data will be NULL in PHP 5.4, and
 ## suhosin session hooks will bail out.
 ## PHP 5.4 allows to check this with mod_user_implemented instead.
+
 ---
- session.c | 21 ++++++++++++++++++---
- 1 file changed, 18 insertions(+), 3 deletions(-)
+ session.c                                | 21 ++++++--
+ tests/executor/user_session_handler.phpt | 87 ++++++++++++++++++++++++++++++++
+ 2 files changed, 105 insertions(+), 3 deletions(-)
+ create mode 100644 tests/executor/user_session_handler.phpt
 
 diff --git a/session.c b/session.c
-index 1045a93..513c195 100644
+index 1045a93..e132c4c 100644
 --- a/session.c
 +++ b/session.c
 @@ -728,7 +728,12 @@ static int suhosin_hook_s_read(void **mod_data, const char *key, char **val, int
@@ -23,10 +27,10 @@ index 1045a93..513c195 100644
      
      /* protect dumb session handlers */
 -    if (key == NULL || !key[0] || *mod_data == NULL) {
-+    if (key == NULL || !key[0] ||
++    if (key == NULL || !key[0] || 
 +		(*mod_data == NULL
 +#if PHP_VERSION_ID >= 50400
-+		 && !SESSION_G(mod_user_implemented)
++		&& !SESSION_G(mod_user_implemented)
 +#endif
 +		)) {
  regenerate:
@@ -37,10 +41,10 @@ index 1045a93..513c195 100644
  
      /* protect dumb session handlers */
 -    if (key == NULL || !key[0] || val == NULL || strlen(key) > SUHOSIN_G(session_max_id_length) || *mod_data == NULL) {
-+    if (key == NULL || !key[0] || val == NULL || strlen(key) > SUHOSIN_G(session_max_id_length) ||
++    if (key == NULL || !key[0] || val == NULL || strlen(key) > SUHOSIN_G(session_max_id_length) || 
 +		(*mod_data == NULL
 +#if PHP_VERSION_ID >= 50400
-+		 && !SESSION_G(mod_user_implemented)
++		&& !SESSION_G(mod_user_implemented)
 +#endif
 +		)) {
          r = FAILURE;
@@ -51,15 +55,108 @@ index 1045a93..513c195 100644
  
      /* protect dumb session handlers */
 -    if (key == NULL || !key[0] || strlen(key) > SUHOSIN_G(session_max_id_length) || *mod_data == NULL) {
-+    if (key == NULL || !key[0] || strlen(key) > SUHOSIN_G(session_max_id_length) ||
++    if (key == NULL || !key[0] || strlen(key) > SUHOSIN_G(session_max_id_length) || 
 +		(*mod_data == NULL
 +#if PHP_VERSION_ID >= 50400
-+		 && !SESSION_G(mod_user_implemented)
++		&& !SESSION_G(mod_user_implemented)
 +#endif
 +		)) {
          return FAILURE;
      }
      
+diff --git a/tests/executor/user_session_handler.phpt b/tests/executor/user_session_handler.phpt
+new file mode 100644
+index 0000000..aa9d67c
+--- /dev/null
++++ b/tests/executor/user_session_handler.phpt
+@@ -0,0 +1,87 @@
++--TEST--
++Testing user session handler functions
++--SKIPIF--
++<?php include "../skipifnotcli.inc"; ?>
++--INI--
++suhosin.log.syslog=0
++suhosin.log.script=0
++suhosin.log.sapi=2
++suhosin.session.encrypt=On
++session.save_path=SUHOSIN_TEST_CASE
++--FILE--
++<?php
++   
++$GLOBALS['test_array_session'] = array();
++$GLOBALS['msg'] = array();
++
++function sess_open($savePath, $sessionName)
++{
++	$GLOBALS['msg'][] = "open $savePath -> $sessionName";
++}
++function sess_close()
++{
++	$GLOBALS['msg'][] = "close";
++}
++function sess_read($id)
++{
++	$GLOBALS['msg'][] = "read $id";
++	return @$GLOBALS['test_array_session'][$id];
++}
++function sess_write($id, $data)
++{
++	$GLOBALS['msg'][] = "write $id - $data";
++	$GLOBALS['test_array_session'][$id] = $data;
++	return true;
++}
++function sess_destroy($id)
++{
++	$GLOBALS['msg'][] = "destroy $id";
++}
++function sess_gc($lifetime)
++{
++}
++    
++session_set_save_handler ( "sess_open" , "sess_close" , "sess_read" , "sess_write" , "sess_destroy" , "sess_gc" );
++session_id(md5("testsession1"));
++session_start();
++
++$_SESSION['test1'] = "test";
++$_SESSION['test2'] = 12345;
++$_SESSION['test3'] = array();
++$_SESSION['test4'] = new StdClass();
++
++session_write_close();
++
++session_start();
++
++var_dump($_SESSION);
++var_dump($msg);
++
++?>
++--EXPECTF--
++array(4) {
++  ["test1"]=>
++  string(4) "test"
++  ["test2"]=>
++  int(12345)
++  ["test3"]=>
++  array(0) {
++  }
++  ["test4"]=>
++  object(stdClass)#1 (0) {
++  }
++}
++array(6) {
++  [0]=>
++  string(35) "open SUHOSIN_TEST_CASE -> PHPSESSID"
++  [1]=>
++  string(37) "read 4cdacd154c45b08c35d83f3b514eddab"
++  [2]=>
++  string(%d) "write 4cdacd154c45b08c35d83f3b514eddab - %s"
++  [3]=>
++  string(5) "close"
++  [4]=>
++  string(35) "open SUHOSIN_TEST_CASE -> PHPSESSID"
++  [5]=>
++  string(37) "read 4cdacd154c45b08c35d83f3b514eddab"
++}
 -- 
-1.8.1.6
+1.8.5.1
 
