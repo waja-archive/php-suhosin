@@ -1,0 +1,31 @@
+## 30_fix_memory_limit_part4 grabbed by Jan Wagner <waja@cyconet.org>
+## taken from upstream SCM
+
+From 35b44afa2cd8bfc2a5ab66d08273e87a2da2d194 Mon Sep 17 00:00:00 2001
+From: Stefan Esser <stefan.esser@sektioneins.de>
+Date: Tue, 11 Feb 2014 14:05:28 +0100
+Subject: [PATCH] Fix this to make the compiler happy
+
+---
+ memory_limit.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/memory_limit.c b/memory_limit.c
+index 5dc20ce..6a6b975 100644
+--- a/memory_limit.c
++++ b/memory_limit.c
+@@ -35,9 +35,9 @@
+ static PHP_INI_MH(suhosin_OnChangeMemoryLimit)
+ {
+ #if SIZEOF_LONG==8
+-	long hard_memory_limit = 1<<63;
++	long hard_memory_limit = 0x7fffffffffffffff;
+ #elif SIZEOF_LONG==4
+-	long hard_memory_limit = 1<<31;
++	long hard_memory_limit = 0x7fffffff;
+ #endif /* will produce a compile error or SIZEOF_LONG is not 4 or 8 */
+ 	if (stage == ZEND_INI_STAGE_RUNTIME) {
+ 		if (SUHOSIN_G(memory_limit) > 0) {
+-- 
+1.8.5.1
+

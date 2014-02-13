@@ -1,4 +1,7 @@
 10_suhosin_0.9.34
 20_fix_session_saving
 21_remove_HAVE_MB_STRING
-30_fix_memory_limit
+30_fix_memory_limit_part1
+30_fix_memory_limit_part2
+30_fix_memory_limit_part3
+30_fix_memory_limit_part4
