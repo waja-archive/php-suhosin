@@ -4,9 +4,9 @@ Priority: optional
 Maintainer: php-suhosin maintainers <php-suhosin-maintainers@ml.snow-crash.org>
 Uploaders: Alexander Wirt <formorer@debian.org>, Jan Wagner <waja@cyconet.org>
 Build-Depends: debhelper (>= 5), php5-dev (>= 5.2.0)
-Homepage: http://www.hardened-php.net/suhosin/
-Vcs-Browser: https://scm.uncompleted.org/projects/debian/repository/show/php-suhosin
-Vcs-Svn: https://scm.uncompleted.org/svn/debian/php-suhosin/trunk
+Homepage: http://www.suhosin.org
+Vcs-Browser: https://github.com/waja/php-suhosin
+Vcs-Git: https://github.com/waja/php-suhosin.git
 Standards-Version: 3.9.4
 
 Package: php5-suhosin
