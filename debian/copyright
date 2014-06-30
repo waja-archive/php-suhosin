@@ -103,9 +103,9 @@ Licenses:
 	can be found in /usr/share/common-licenses/GPL file.
 
 	All other files:
-	Copyright (c) 2006 The Hardened-PHP Project
+	Copyright (c) 2006-2007 The Hardened-PHP Project
 		Stefan Esser <sesser@hardened-php.net>
-	Copyright (c) 2007 SektionEins GmbH
+	Copyright (c) 2007-2014 SektionEins GmbH
 	License: PHP license 3.01
 
 	--------------------------------------------------------------------
