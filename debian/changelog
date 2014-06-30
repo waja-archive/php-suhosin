@@ -1,3 +1,10 @@
+php-suhosin (0.9.36-1) UNRELEASED; urgency=medium
+
+  * [a0f5f76] Imported Upstream version 0.9.36
+  * [d3689d3] Updating copyright
+
+ -- Jan Wagner <waja@cyconet.org>  Mon, 30 Jun 2014 21:54:53 +0200
+
 php-suhosin (0.9.33-4) UNRELEASED; urgency=low
 
   * Update to recent development version
@@ -12,6 +19,22 @@ php-suhosin (0.9.33-4) UNRELEASED; urgency=low
     - Add php5-suhosin.preinst
   * Add build-arch and build-indep targets to debian/rules
   * Bump standards version to 3.9.4, no additional changes needed
+  * [dc0d44b] Update 20_fix_session_saving.dpatch to upstream version
+  * [31e86ee] Add travis-ci config
+  * [ec6594c] travis-ci: Add devscripts to installed packages
+  * [1c6c7c5] Update watch file
+  * [5dace49] travis-ci: Download original tarball when building
+  * [e498a37] travis-ci: Force download of upstream tarball in
+  * [01087cd] Update diff ignore patterns
+  * [2e7df2e] travis-ci: Remove auto installed packages
+  * [dc85737] travis-ci: Add sudo to travis apt-get command
+  * [20a94db] Migrate over to source format 3.0 and drop dpatch
+  * [e06c826] Add memory fixes from uspteam SCM
+  * [a41a125] Split 30_fix_memory_limit into the original pieces
+  * [b726fe5] travis-ci: Reorder and comment
+  * [ee52ecf] Delete patch
+  * [5f2555d] Updating the watch file
+  * [e99204b] Updating Homepage- and VCS-fields
 
  -- Jan Wagner <waja@cyconet.org>  Tue, 24 Jan 2012 23:13:08 +0100
 
