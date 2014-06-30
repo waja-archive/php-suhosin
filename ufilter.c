@@ -3,7 +3,7 @@
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
   | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007-2012 SektionEins GmbH                             |
+  | Copyright (c) 2007-2014 SektionEins GmbH                             |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -31,6 +31,7 @@
 #include "php_variables.h"
 #include "suhosin_rfc1867.h"
 
+PHP_SUHOSIN_API int (*old_rfc1867_callback)(unsigned int event, void *event_data, void **extra TSRMLS_DC) = NULL;
 #if !HAVE_RFC1867_CALLBACK
 PHP_SUHOSIN_API int (*php_rfc1867_callback)(unsigned int event, void *event_data, void **extra TSRMLS_DC) = NULL;
 #endif
@@ -130,29 +131,36 @@ static int check_fileupload_varname(char *varname)
 	
 	/* Find out array depth */
 	while (index) {
+		char *index_end;
 		unsigned int index_length;
 		
-		depth++;
-		index = strchr(index+1, '[');
+		/* overjump '[' */
+		index++;
 		
-		if (prev_index) {
-			index_length = index ? index - 1 - prev_index - 1: strlen(prev_index);
-			
-			if (SUHOSIN_G(max_array_index_length) && SUHOSIN_G(max_array_index_length) < index_length) {
-				suhosin_log(S_FILES, "configured request variable array index length limit exceeded - dropped variable '%s'", var);
-				if (!SUHOSIN_G(simulation)) {
-					goto return_failure;
-				}
-			} 
-			if (SUHOSIN_G(max_post_array_index_length) && SUHOSIN_G(max_post_array_index_length) < index_length) {
-				suhosin_log(S_FILES, "configured POST variable array index length limit exceeded - dropped variable '%s'", var);
-				if (!SUHOSIN_G(simulation)) {
-					goto return_failure;
-				}
-			} 
-			prev_index = index;
+		/* increase array depth */
+		depth++;
+				
+		index_end = strchr(index, ']');
+		if (index_end == NULL) {
+			index_end = index+strlen(index);
 		}
 		
+		index_length = index_end - index;
+			
+		if (SUHOSIN_G(max_array_index_length) && SUHOSIN_G(max_array_index_length) < index_length) {
+			suhosin_log(S_FILES, "configured request variable array index length limit exceeded - dropped variable '%s'", var);
+			if (!SUHOSIN_G(simulation)) {
+				goto return_failure;
+			}
+		} 
+		if (SUHOSIN_G(max_post_array_index_length) && SUHOSIN_G(max_post_array_index_length) < index_length) {
+			suhosin_log(S_FILES, "configured POST variable array index length limit exceeded - dropped variable '%s'", var);
+			if (!SUHOSIN_G(simulation)) {
+				goto return_failure;
+			}
+		} 
+		
+		index = strchr(index, '[');		
 	}
 	
 	/* Drop this variable if it exceeds the array depth limit */
@@ -284,6 +292,7 @@ int suhosin_rfc1867_filter(unsigned int event, void *event_data, void **extra TS
 			    char cmd[8192];
 			    FILE *in;
 			    int first=1;
+				struct stat st;
 			    char *sname = SUHOSIN_G(upload_verification_script);
 			    
 			    /* ignore files that will get deleted anyway */
@@ -297,8 +306,25 @@ int suhosin_rfc1867_filter(unsigned int event, void *event_data, void **extra TS
 				    SUHOSIN_G(num_uploads)++;
 				    break;
 			    }
-		
-			    ap_php_snprintf(cmd, sizeof(cmd), "%s %s", sname, mefe->temp_filename);
+				
+				if (VCWD_STAT(sname, &st) < 0) {
+					suhosin_log(S_FILES, "unable to find fileupload verification script %s - file dropped", sname);
+					if (!SUHOSIN_G(simulation)) {
+						goto continue_with_failure;
+					} else {
+						goto continue_with_next;
+					}
+				}
+				if (access(sname, X_OK|R_OK) < 0) {
+					suhosin_log(S_FILES, "fileupload verification script %s is not executable - file dropped", sname);
+					if (!SUHOSIN_G(simulation)) {
+						goto continue_with_failure;
+					} else {
+						goto continue_with_next;
+					}					
+				}
+				
+			    ap_php_snprintf(cmd, sizeof(cmd), "%s %s 2>&1", sname, mefe->temp_filename);
 
 			    if ((in=VCWD_POPEN(cmd, "r"))==NULL) {
 				    suhosin_log(S_FILES, "unable to execute fileupload verification script %s - file dropped", sname);
@@ -318,8 +344,18 @@ int suhosin_rfc1867_filter(unsigned int event, void *event_data, void **extra TS
 					    break;
 				    }
 				    if (first) {
-					    retval = atoi(cmd) == 1 ? SUCCESS : FAILURE;
-					    first = 0;
+						if (strncmp(cmd, "sh: ", 4) == 0) {
+							/* assume this is an error */
+							suhosin_log(S_FILES, "error while executing fileupload verification script %s - file dropped", sname);
+							if (!SUHOSIN_G(simulation)) {
+								goto continue_with_failure;
+							} else {
+								goto continue_with_next;
+							}
+						} else {
+							retval = atoi(cmd) == 1 ? SUCCESS : FAILURE;
+							first = 0;
+						}
 				    }
 			    }
 			    pclose(in);

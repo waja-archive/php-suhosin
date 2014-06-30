@@ -3,7 +3,7 @@
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
   | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007-2012 SektionEins GmbH                             |
+  | Copyright (c) 2007-2014 SektionEins GmbH                             |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -38,6 +38,10 @@ SAPI_TREAT_DATA_FUNC(suhosin_treat_data)
 	zval *array_ptr;
 	int free_buffer = 0;
 	char *strtok_buf = NULL;
+	
+#if PHP_VERSION_ID >= 50311
+	long count = 0;
+#endif
 
 	/* Mark that we were not yet called */
 	SUHOSIN_G(already_scanned) = 0;
@@ -135,10 +139,22 @@ SAPI_TREAT_DATA_FUNC(suhosin_treat_data)
 	var = php_strtok_r(res, separator, &strtok_buf);
 	
 	while (var) {
-		/* Overjump plain whitespace */
-		while (*var && *var == ' ') var++;
-
+		
+		if (arg == PARSE_COOKIE) {
+			/* Remove leading spaces from cookie names, needed for multi-cookie header where ; can be followed by a space */
+			while (isspace(*var)) {
+				var++;
+			}
+		}
 		val = strchr(var, '=');
+		
+#if PHP_VERSION_ID >= 50311
+		if (++count > PG(max_input_vars)) {
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Input variables exceeded %ld. To increase the limit change max_input_vars in php.ini.", PG(max_input_vars));
+			break;
+		}
+#endif
+		
 		if (val) { /* have a value */
 			int val_len;
 			unsigned int new_val_len;
@@ -194,7 +210,13 @@ SAPI_TREAT_DATA_FUNC(suhosin_treat_data)
 
 void suhosin_hook_treat_data()
 {
+#if PHP_VERSION_ID < 50400
 	sapi_register_treat_data(suhosin_treat_data);
+#else
+	TSRMLS_FETCH();
+
+	sapi_register_treat_data(suhosin_treat_data TSRMLS_CC);
+#endif
 #ifdef ZEND_ENGINE_2
 	if (old_input_filter == NULL) {
 		old_input_filter = sapi_module.input_filter;

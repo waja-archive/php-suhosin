@@ -3,7 +3,7 @@
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
   | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007-2012 SektionEins GmbH                             |
+  | Copyright (c) 2007-2014 SektionEins GmbH                             |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -34,6 +34,12 @@
 
 #ifdef HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
+#endif
+
+#ifdef HAVE_SYS_TIME_H
+#include <sys/time.h>
+#elif defined(PHP_WIN32)
+#include "win32/time.h"
 #endif
 
 #if defined(PHP_WIN32) || defined(__riscos__) || defined(NETWARE)
@@ -88,6 +94,7 @@ PHP_SUHOSIN_API void suhosin_log(int loglevel, char *fmt, ...)
 {
 	int s, r, i=0, fd;
 	long written, towrite;
+	int getcaller=0;
 	char *wbuf;
 	struct timeval tv;
 	time_t now;
@@ -100,14 +107,20 @@ PHP_SUHOSIN_API void suhosin_log(int loglevel, char *fmt, ...)
 	unsigned short etype;
 	DWORD evid;
 #endif
-	char buf[4096+64];
-	char error[4096+100];
+	char buf[5000];
+	char error[5000];
 	char *ip_address;
 	char *fname;
 	char *alertstring;
 	int lineno;
 	va_list ap;
 	TSRMLS_FETCH();
+
+#if PHP_VERSION_ID >= 50500
+	getcaller = (loglevel & S_GETCALLER) == S_GETCALLER;
+#endif
+	/* remove the S_GETCALLER flag */
+	loglevel = loglevel & ~S_GETCALLER;
 
 	SDEBUG("(suhosin_log) loglevel: %d log_syslog: %u - log_sapi: %u - log_script: %u", loglevel, SUHOSIN_G(log_syslog), SUHOSIN_G(log_sapi), SUHOSIN_G(log_script));
 
@@ -145,12 +158,18 @@ PHP_SUHOSIN_API void suhosin_log(int loglevel, char *fmt, ...)
 	}
 	
 	if (zend_is_executing(TSRMLS_C)) {
-		if (EG(current_execute_data)) {
-			lineno = EG(current_execute_data)->opline->lineno;
-			fname = EG(current_execute_data)->op_array->filename;
+		zend_execute_data *exdata = EG(current_execute_data);
+		if (exdata) {
+			if (getcaller && exdata->prev_execute_data) {
+				lineno = exdata->prev_execute_data->opline->lineno;
+				fname = (char *)exdata->prev_execute_data->op_array->filename;									
+			} else {
+				lineno = exdata->opline->lineno;
+				fname = (char *)exdata->op_array->filename;				
+			}
 		} else {
 			lineno = zend_get_executed_lineno(TSRMLS_C);
-			fname = zend_get_executed_filename(TSRMLS_C);
+			fname = (char *)zend_get_executed_filename(TSRMLS_C);
 		}
 		ap_php_snprintf(buf, sizeof(buf), "%s - %s (attacker '%s', file '%s', line %u)", alertstring, error, ip_address, fname, lineno);
 	} else {
@@ -261,7 +280,14 @@ log_sapi:
 	/* SAPI Logging activated? */
 	SDEBUG("(suhosin_log) log_syslog: %u - log_sapi: %u - log_script: %u - log_phpscript: %u", SUHOSIN_G(log_syslog), SUHOSIN_G(log_sapi), SUHOSIN_G(log_script), SUHOSIN_G(log_phpscript));
 	if (((SUHOSIN_G(log_sapi)|S_INTERNAL) & loglevel)!=0) {
+#if PHP_VERSION_ID < 50400
 		sapi_module.log_message(buf);
+#else
+		sapi_module.log_message(buf TSRMLS_CC);
+#endif
+	}
+	if ((SUHOSIN_G(log_stdout) & loglevel)!=0) {
+		printf("%s\n", buf);
 	}
 
 /*log_script:*/
@@ -270,13 +296,24 @@ log_sapi:
 		char cmd[8192], *cmdpos, *bufpos;
 		FILE *in;
 		int space;
+		struct stat st;
 		
 		char *sname = SUHOSIN_G(log_scriptname);
 		while (isspace(*sname)) ++sname;
 		if (*sname == 0) goto log_phpscript;
 		
-		ap_php_snprintf(cmd, sizeof(cmd), "%s %s \'", sname, loglevel2string(loglevel));
-		space = sizeof(cmd) - strlen(cmd);
+		if (VCWD_STAT(sname, &st) < 0) {
+			suhosin_log(S_INTERNAL, "unable to find logging shell script %s - file dropped", sname);
+			goto log_phpscript;
+		}
+		if (access(sname, X_OK|R_OK) < 0) {
+			suhosin_log(S_INTERNAL, "logging shell script %s is not executable - file dropped", sname);
+			goto log_phpscript;					
+		}
+		
+		/* TODO: clean up this code to calculate size of output dynamically */
+		ap_php_snprintf(cmd, sizeof(cmd) - 20, "%s %s \'", sname, loglevel2string(loglevel));
+		space = sizeof(cmd) - strlen(cmd) - 20;
 		cmdpos = cmd + strlen(cmd);
 		bufpos = buf;
 		if (space <= 1) return;
@@ -295,17 +332,28 @@ log_sapi:
 			}
 		}
 		*cmdpos++ = '\'';
+		*cmdpos++ = ' ';
+		*cmdpos++ = '2';
+		*cmdpos++ = '>';
+		*cmdpos++ = '&';
+		*cmdpos++ = '1';
 		*cmdpos = 0;
 		
 		if ((in=VCWD_POPEN(cmd, "r"))==NULL) {
 			suhosin_log(S_INTERNAL, "Unable to execute logging shell script: %s", sname);
-			return;
+			goto log_phpscript;
 		}
 		/* read and forget the result */
 		while (1) {
 			int readbytes = fread(cmd, 1, sizeof(cmd), in);
 			if (readbytes<=0) {
 				break;
+			}
+			if (strncmp(cmd, "sh: ", 4) == 0) {
+				/* assume this is an error */
+				suhosin_log(S_INTERNAL, "Error while executing logging shell script: %s", sname);
+				pclose(in);
+				goto log_phpscript;
 			}
 		}
 		pclose(in);
@@ -317,7 +365,9 @@ log_phpscript:
 		zval *result = NULL;
 		
 		long orig_execution_depth = SUHOSIN_G(execution_depth);
+#if PHP_VERSION_ID < 50400
 		zend_bool orig_safe_mode = PG(safe_mode);
+#endif
 		char *orig_basedir = PG(open_basedir);
 		
 		char *phpscript = SUHOSIN_G(log_phpscriptname);
@@ -354,14 +404,18 @@ SDEBUG("scriptname %s", SUHOSIN_G(log_phpscriptname));
 				
 				SUHOSIN_G(execution_depth) = 0;
 				if (SUHOSIN_G(log_phpscript_is_safe)) {
+#if PHP_VERSION_ID < 50400
 					PG(safe_mode) = 0;
+#endif
 					PG(open_basedir) = NULL;
 				}
 				
 				zend_execute(new_op_array TSRMLS_CC);
 				
 				SUHOSIN_G(execution_depth) = orig_execution_depth;
+#if PHP_VERSION_ID < 50400				
 				PG(safe_mode) = orig_safe_mode;
+#endif
 				PG(open_basedir) = orig_basedir;
 				
 #ifdef ZEND_ENGINE_2

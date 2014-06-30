@@ -3,7 +3,7 @@
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
   | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007-2012 SektionEins GmbH                             |
+  | Copyright (c) 2007-2014 SektionEins GmbH                             |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -32,7 +32,9 @@
 #include "zend_llist.h"
 #include "zend_operators.h"
 #include "SAPI.h"
+#if PHP_VERSION_ID < 50500
 #include "php_logos.h"
+#endif
 #include "suhosin_logo.h"
 #include "ext/standard/php_string.h"
 #include "ext/standard/url.h"
@@ -62,7 +64,7 @@ STATIC zend_extension suhosin_zend_extension_entry = {
 	SUHOSIN_EXT_VERSION,
 	"SektionEins GmbH",
 	"http://www.suhosin.org",
-	"Copyright (c) 2007-2012",
+	"Copyright (c) 2007-2014",
 	suhosin_module_startup,
 	suhosin_shutdown,
 	NULL,
@@ -189,9 +191,12 @@ static int suhosin_module_startup(zend_extension *extension)
 
 static void suhosin_shutdown(zend_extension *extension)
 {
+	TSRMLS_FETCH();
+
 	suhosin_unhook_execute();
 	suhosin_unhook_header_handler();
-	suhosin_unhook_post_handlers();
+	suhosin_unhook_post_handlers(TSRMLS_C);
+	/* suhosin_unhook_session(); - enabling this causes compability problems */
     
     if (ze != NULL) {
 	    ze->startup = orig_module_startup;
@@ -414,6 +419,16 @@ static ZEND_INI_MH(OnUpdateSuhosin_log_sapi)
 	}
 	return SUCCESS;
 }
+static ZEND_INI_MH(OnUpdateSuhosin_log_stdout)
+{
+    LOG_PERDIR_CHECK()
+	if (!new_value) {
+		SUHOSIN_G(log_stdout) = (S_ALL & ~S_SQL);
+	} else {
+		SUHOSIN_G(log_stdout) = atoi(new_value);
+	}
+	return SUCCESS;
+}
 static ZEND_INI_MH(OnUpdateSuhosin_log_script)
 {
     LOG_PERDIR_CHECK()
@@ -566,6 +581,43 @@ static ZEND_INI_MH(OnUpdate_cookie_plainlist)
 	return SUCCESS;
 }
 
+static ZEND_INI_MH(OnUpdate_disable_display_errors) /* {{{ */
+{
+	zend_bool *p;
+#ifndef ZTS
+	char *base = (char *) mh_arg2;
+#else
+	char *base;
+
+	base = (char *) ts_resource(*((int *) mh_arg2));
+#endif
+
+	p = (zend_bool *) (base+(size_t) mh_arg1);
+
+	if (new_value_length == 2 && strcasecmp("on", new_value) == 0) {
+		*p = (zend_bool) 1;
+	}
+	else if (new_value_length == 3 && strcasecmp("yes", new_value) == 0) {
+		*p = (zend_bool) 1;
+	}
+	else if (new_value_length == 4 && strcasecmp("true", new_value) == 0) {
+		*p = (zend_bool) 1;
+	}
+	else if (new_value_length == 4 && strcasecmp("fail", new_value) == 0) {
+		*p = (zend_bool) 2;
+	}
+	else {
+		*p = (zend_bool) atoi(new_value);
+	}
+	return SUCCESS;
+}
+/* }}} */
+
+static ZEND_INI_MH(OnUpdate_fail)
+{
+	return FAILURE;
+}
+
 /* {{{ proto void suhosin_register_cookie_variable(char *var, zval *val, zval *track_vars_array TSRMLS_DC)
    Registers a cookie in the RAW cookie array */
 static void suhosin_register_cookie_variable(char *var, zval *val, zval *track_vars_array TSRMLS_DC)
@@ -646,12 +698,16 @@ static void suhosin_register_cookie_variable(char *var, zval *val, zval *track_v
 				array_init(gpc_element);
 				zend_hash_next_index_insert(symtable1, &gpc_element, sizeof(zval *), (void **) &gpc_element_p);
 			} else {
+#if PHP_VERSION_ID < 50400
 				if (PG(magic_quotes_gpc) && (index != var)) {
 					/* no need to addslashes() the index if it's the main variable name */
 					escaped_index = php_addslashes(index, index_len, &index_len, 0 TSRMLS_CC);
 				} else {
+#endif
 					escaped_index = index;
+#if PHP_VERSION_ID < 50400
 				}
+#endif
 				if (zend_symtable_find(symtable1, escaped_index, index_len + 1, (void **) &gpc_element_p) == FAILURE
 					|| Z_TYPE_PP(gpc_element_p) != IS_ARRAY) {
 					MAKE_STD_ZVAL(gpc_element);
@@ -683,11 +739,15 @@ plain_var:
 		if (!index) {
 			zend_hash_next_index_insert(symtable1, &gpc_element, sizeof(zval *), (void **) &gpc_element_p);
 		} else {
+#if PHP_VERSION_ID < 50400
 			if (PG(magic_quotes_gpc)) { 
 				escaped_index = php_addslashes(index, index_len, &index_len, 0 TSRMLS_CC);
 			} else {
+#endif
 				escaped_index = index;
+#if PHP_VERSION_ID < 50400
 			}
+#endif
 			/* 
 			 * According to rfc2965, more specific paths are listed above the less specific ones.
 			 * If we encounter a duplicate cookie name, we should skip it, since it is not possible
@@ -714,11 +774,15 @@ static void suhosin_register_cookie_variable_safe(char *var, char *strval, int s
 	
 	/* Prepare value */
 	Z_STRLEN(new_entry) = str_len;
+#if PHP_VERSION_ID < 50400
 	if (PG(magic_quotes_gpc)) {
 		Z_STRVAL(new_entry) = php_addslashes(strval, Z_STRLEN(new_entry), &Z_STRLEN(new_entry), 0 TSRMLS_CC);
 	} else {
+#endif
 		Z_STRVAL(new_entry) = estrndup(strval, Z_STRLEN(new_entry));
+#if PHP_VERSION_ID < 50400
 	}
+#endif
 	Z_TYPE(new_entry) = IS_STRING;
 
 	suhosin_register_cookie_variable(var, &new_entry, track_vars_array TSRMLS_CC);
@@ -840,6 +904,7 @@ static zend_ini_entry shared_ini_entries[] = {
 	ZEND_INI_ENTRY("suhosin.log.syslog.facility",		NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateSuhosin_log_syslog_facility)
 	ZEND_INI_ENTRY("suhosin.log.syslog.priority",		NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateSuhosin_log_syslog_priority)
 	ZEND_INI_ENTRY("suhosin.log.sapi",				"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateSuhosin_log_sapi)
+	ZEND_INI_ENTRY("suhosin.log.stdout",				"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateSuhosin_log_stdout)
 	ZEND_INI_ENTRY("suhosin.log.script",			"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateSuhosin_log_script)
 	ZEND_INI_ENTRY("suhosin.log.script.name",			NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateSuhosin_log_scriptname)
 	STD_ZEND_INI_BOOLEAN("suhosin.log.use-x-forwarded-for",	"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateLogBool, log_use_x_forwarded_for,	zend_suhosin_globals,	suhosin_globals)
@@ -877,7 +942,7 @@ PHP_INI_BEGIN()
 	STD_ZEND_INI_BOOLEAN("suhosin.coredump",		"0",		ZEND_INI_SYSTEM,	OnUpdateBool, coredump,	zend_suhosin_globals,	suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.stealth",		"1",		ZEND_INI_SYSTEM,	OnUpdateBool, stealth,	zend_suhosin_globals,	suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.apc_bug_workaround",		"0",		ZEND_INI_SYSTEM,	OnUpdateBool, apc_bug_workaround,	zend_suhosin_globals,	suhosin_globals)
-	STD_ZEND_INI_BOOLEAN("suhosin.disable.display_errors",		"0",		ZEND_INI_SYSTEM,	OnUpdateBool, disable_display_errors,	zend_suhosin_globals,	suhosin_globals)
+	STD_ZEND_INI_BOOLEAN("suhosin.disable.display_errors",		"0",		ZEND_INI_SYSTEM,	OnUpdate_disable_display_errors, disable_display_errors,	zend_suhosin_globals,	suhosin_globals)
 	
 	
 
@@ -950,10 +1015,11 @@ PHP_INI_BEGIN()
 	ZEND_INI_ENTRY("suhosin.cookie.cryptlist",	NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdate_cookie_cryptlist)
 	ZEND_INI_ENTRY("suhosin.cookie.plainlist",	NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdate_cookie_plainlist)
 
-
 	STD_ZEND_INI_BOOLEAN("suhosin.server.encode", "1", ZEND_INI_SYSTEM, OnUpdateBool, server_encode,zend_suhosin_globals,	suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.server.strip", "1", ZEND_INI_SYSTEM, OnUpdateBool, server_strip,zend_suhosin_globals,	suhosin_globals)
 
+	STD_PHP_INI_ENTRY("suhosin.rand.seedingkey", "", ZEND_INI_SYSTEM|ZEND_INI_PERDIR, OnUpdateString, seedingkey, zend_suhosin_globals, suhosin_globals)
+	STD_ZEND_INI_BOOLEAN("suhosin.rand.reseed_every_request", "0", ZEND_INI_SYSTEM|ZEND_INI_PERDIR, OnUpdateMiscBool, reseed_every_request, zend_suhosin_globals, suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.srand.ignore", "1", ZEND_INI_SYSTEM|ZEND_INI_PERDIR, OnUpdateMiscBool, srand_ignore,zend_suhosin_globals,	suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.mt_srand.ignore", "1", ZEND_INI_SYSTEM|ZEND_INI_PERDIR, OnUpdateMiscBool, mt_srand_ignore,zend_suhosin_globals,	suhosin_globals)
 
@@ -1076,8 +1142,13 @@ PHP_MINIT_FUNCTION(suhosin)
 		zend_ini_entry *i;
 		if (zend_hash_find(EG(ini_directives), "display_errors", sizeof("display_errors"), (void **) &i) == SUCCESS) {
 			if (i->on_modify) {
-				i->on_modify(i, "0", sizeof("0"), i->mh_arg1, i->mh_arg2, i->mh_arg3, ZEND_INI_STAGE_STARTUP TSRMLS_CC);
-				i->on_modify = NULL;
+				if (SUHOSIN_G(disable_display_errors) > 1) {
+					zend_alter_ini_entry_ex("display_errors", sizeof("display_errors"), "0", sizeof("0"), ZEND_INI_SYSTEM, ZEND_INI_STAGE_STARTUP, 0 TSRMLS_CC);
+					i->on_modify = OnUpdate_fail;
+				} else {
+					i->on_modify(i, "Off", sizeof("off"), i->mh_arg1, i->mh_arg2, i->mh_arg3, ZEND_INI_STAGE_STARTUP TSRMLS_CC);
+					i->on_modify = NULL;
+				}
 			}
 		}
 	}
@@ -1100,8 +1171,10 @@ PHP_MINIT_FUNCTION(suhosin)
 	suhosin_hook_sha256();
 	suhosin_hook_ex_imp();
 
+#if PHP_VERSION_ID < 50500
 	/* register the logo for phpinfo */
 	php_register_info_logo(SUHOSIN_LOGO_GUID, "image/jpeg", suhosin_logo, sizeof(suhosin_logo));
+#endif
 
 #if PHP_MAJOR_VERSION < 5
 	php_error_docref(NULL TSRMLS_CC, E_ERROR, "Suhosin Extension is not designed to run with PHP 4 and below. Erroring Out.");
@@ -1153,6 +1226,10 @@ PHP_RSHUTDOWN_FUNCTION(suhosin)
 	SUHOSIN_G(cur_cookie_vars) = 0;
 	SUHOSIN_G(cur_get_vars) = 0;
 	SUHOSIN_G(cur_post_vars) = 0;
+	SUHOSIN_G(att_request_variables) = 0;
+	SUHOSIN_G(att_cookie_vars) = 0;
+	SUHOSIN_G(att_get_vars) = 0;
+	SUHOSIN_G(att_post_vars) = 0;
 	SUHOSIN_G(num_uploads) = 0;
 
         SUHOSIN_G(no_more_variables) = 0;
@@ -1162,6 +1239,11 @@ PHP_RSHUTDOWN_FUNCTION(suhosin)
         SUHOSIN_G(no_more_uploads) = 0;
 	
 	SUHOSIN_G(abort_request) = 0;
+	
+	if (SUHOSIN_G(reseed_every_request)) {
+		SUHOSIN_G(r_is_seeded) = 0;
+		SUHOSIN_G(mt_is_seeded) = 0;
+	}
 	
 	if (SUHOSIN_G(decrypted_cookie)) {
 		efree(SUHOSIN_G(decrypted_cookie));
@@ -1192,32 +1274,10 @@ PHP_MINFO_FUNCTION(suhosin)
 {
 	php_info_print_box_start(0);
 	if (!sapi_module.phpinfo_as_text) {
-		if (PG(expose_php)) {
-			PUTS("<a href=\"http://www.suhosin.org/\"><img border=\"0\" src=\"");
-			if (SG(request_info).request_uri) {
-				char *elem_esc = php_info_html_esc(SG(request_info).request_uri TSRMLS_CC);
-				PUTS(elem_esc);
-				efree(elem_esc);
-			}
-			PUTS("?="SUHOSIN_LOGO_GUID"\" alt=\"Suhosin logo\" /></a>\n");
-		} else do {
+		do {
 			char *enc_logo;
 			int ret;
-			zval **agent_name;
-			
-#ifdef ZEND_ENGINE_2
-			zend_is_auto_global("_SERVER", sizeof("_SERVER")-1 TSRMLS_CC);
-#endif
-			if (!PG(http_globals)[TRACK_VARS_SERVER] || 
-			    zend_hash_find(PG(http_globals)[TRACK_VARS_SERVER]->value.ht, "HTTP_USER_AGENT", sizeof("HTTP_USER_AGENT"), (void **) &agent_name)==FAILURE) {
-			    break;
-			}
-			if (Z_TYPE_PP(agent_name) != IS_STRING) {
-			    break;
-			}
-			if (strstr(Z_STRVAL_PP(agent_name), "Gecko") == NULL && strstr(Z_STRVAL_PP(agent_name), "Opera") == NULL) {
-			    break;
-			}
+
 			PUTS("<a href=\"http://www.suhosin.org/\"><img border=\"0\" src=\"data:image/jpeg;base64,");
 			enc_logo=(char *)php_base64_encode(suhosin_logo, sizeof(suhosin_logo), &ret);
 			if (enc_logo) {
@@ -1231,10 +1291,10 @@ PHP_MINFO_FUNCTION(suhosin)
 	PUTS(!sapi_module.phpinfo_as_text?"<br /><br />":"\n\n");
 	if (sapi_module.phpinfo_as_text) {
 		PUTS("Copyright (c) 2006-2007 Hardened-PHP Project\n");
-		PUTS("Copyright (c) 2007-2012 SektionEins GmbH\n");
+		PUTS("Copyright (c) 2007-2014 SektionEins GmbH\n");
 	} else {
 		PUTS("Copyright (c) 2006-2007 <a href=\"http://www.hardened-php.net/\">Hardened-PHP Project</a><br />\n");
-		PUTS("Copyright (c) 2007-2012 <a href=\"http://www.sektioneins.de/\">SektionEins GmbH</a>\n");
+		PUTS("Copyright (c) 2007-2014 <a href=\"http://www.sektioneins.de/\">SektionEins GmbH</a>\n");
 	}
 	php_info_print_box_end();
 
@@ -1245,6 +1305,9 @@ PHP_MINFO_FUNCTION(suhosin)
             i->displayer = suhosin_ini_displayer;
         }
 		if (zend_hash_find(EG(ini_directives), "suhosin.session.cryptkey", sizeof("suhosin.session.cryptkey"), (void **) &i)==SUCCESS) {
+            i->displayer = suhosin_ini_displayer;
+        }
+		if (zend_hash_find(EG(ini_directives), "suhosin.rand.seedingkey", sizeof("suhosin.rand.seedingkey"), (void **) &i)==SUCCESS) {
             i->displayer = suhosin_ini_displayer;
         }
     }
@@ -1258,6 +1321,9 @@ PHP_MINFO_FUNCTION(suhosin)
             i->displayer = NULL;
         }
 		if (zend_hash_find(EG(ini_directives), "suhosin.session.cryptkey", sizeof("suhosin.session.cryptkey"), (void **) &i)==SUCCESS) {
+            i->displayer = NULL;
+        }
+		if (zend_hash_find(EG(ini_directives), "suhosin.rand.seedingkey", sizeof("suhosin.rand.seedingkey"), (void **) &i)==SUCCESS) {
             i->displayer = NULL;
         }
     }

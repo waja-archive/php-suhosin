@@ -3,7 +3,7 @@
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
   | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007-2012 SektionEins GmbH                             |
+  | Copyright (c) 2007-2014 SektionEins GmbH                             |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -463,7 +463,7 @@ static int copy_request_variable(void *pDest TSRMLS_DC, int num_args, va_list ar
 	}
 
 	if (hash_key->nKeyLength) {
-		php_prefix_varname(&new_key, prefix, hash_key->arKey, hash_key->nKeyLength - 1, 0 TSRMLS_CC);
+		php_prefix_varname(&new_key, prefix, (char *)hash_key->arKey, hash_key->nKeyLength - 1, 0 TSRMLS_CC);
 	} else {
 		zval num;
 
@@ -727,13 +727,12 @@ ZEND_END_ARG_INFO()
 
 /* {{{ suhosin_ex_imp_functions[]
  */
-function_entry suhosin_ex_imp_functions[] = {
+zend_function_entry suhosin_ex_imp_functions[] = {
 	PHP_NAMED_FE(extract, PHP_FN(suhosin_extract), suhosin_arginfo_extract)
 	PHP_NAMED_FE(import_request_variables, PHP_FN(suhosin_import_request_variables), suhosin_arginfo_import_request_variables)
 	{NULL, NULL, NULL}
 };
 /* }}} */
-
 
 void suhosin_hook_ex_imp()
 {

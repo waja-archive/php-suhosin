@@ -36,6 +36,8 @@
 #include "php_ini.h"
 #include "ext/standard/php_string.h"
 
+#if PHP_VERSION_ID < 50400
+
 #define DEBUG_FILE_UPLOAD ZEND_DEBUG
 
 #if HAVE_MBSTRING && !defined(COMPILE_DL_MBSTRING)
@@ -244,21 +246,29 @@ static void safe_php_register_variable_ex(char *var, zval *val, zval *track_vars
 
 static void register_http_post_files_variable(char *strvar, char *val, zval *http_post_files, zend_bool override_protection TSRMLS_DC)
 {
+#if PHP_VERSION_ID < 50400
 	int register_globals = PG(register_globals);
 
 	PG(register_globals) = 0;
+#endif
 	safe_php_register_variable(strvar, val, http_post_files, override_protection TSRMLS_CC);
+#if PHP_VERSION_ID < 50400
 	PG(register_globals) = register_globals;
+#endif
 }
 
 
 static void register_http_post_files_variable_ex(char *var, zval *val, zval *http_post_files, zend_bool override_protection TSRMLS_DC)
 {
+#if PHP_VERSION_ID < 50400
 	int register_globals = PG(register_globals);
 
 	PG(register_globals) = 0;
+#endif
 	safe_php_register_variable_ex(var, val, http_post_files, override_protection TSRMLS_CC);
+#if PHP_VERSION_ID < 50400
 	PG(register_globals) = register_globals;
+#endif
 }
 
 /*
@@ -929,7 +939,8 @@ SAPI_POST_HANDLER_FUNC(suhosin_rfc1867_post_handler)
 					value = estrdup("");
 				}
 SDEBUG("calling inputfilter");				
-				if (suhosin_input_filter(PARSE_POST, param, &value, strlen(value), &new_val_len TSRMLS_CC) == 0) {
+				if (suhosin_input_filter(PARSE_POST, param, &value, value_len, &new_val_len TSRMLS_CC) == 0) {
+					SUHOSIN_G(abort_request)=1;
 					efree(param);
 					efree(value);
 					continue;
@@ -1373,6 +1384,8 @@ fileupload_done:
 	
 	SAFE_RETURN;
 }
+
+#endif
 
 /*
  * Local variables:
