@@ -1,2 +1,2 @@
 version=3
-http://www.hardened-php.net/suhosin/download.html http://download.suhosin.org/suhosin-(.*)\.tgz
+http://www.suhosin.org/stories/download.html http://download.suhosin.org/suhosin-(.*)\.tgz
