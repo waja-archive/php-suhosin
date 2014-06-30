@@ -3,7 +3,7 @@
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
   | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007-2012 SektionEins GmbH                             |
+  | Copyright (c) 2007-2014 SektionEins GmbH                             |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -32,26 +32,6 @@
 
 
 static void (*orig_register_server_variables)(zval *track_vars_array TSRMLS_DC) = NULL;
-
-#ifdef ZEND_ENGINE_2
-#define HASH_HTTP_GET_VARS      0x2095733f
-#define HASH_HTTP_POST_VARS     0xbfee1265
-#define HASH_HTTP_COOKIE_VARS   0xaaca9d99
-#define HASH_HTTP_ENV_VARS      0x1fe186a8
-#define HASH_HTTP_SERVER_VARS   0xc987afd6
-#define HASH_HTTP_SESSION_VARS  0x7aba0d43
-#define HASH_HTTP_POST_FILES    0x98eb1ddc
-#define HASH_HTTP_RAW_POST_DATA 0xdd633fec
-#else
-#define HASH_HTTP_GET_VARS      0x8d8645bd
-#define HASH_HTTP_POST_VARS     0x7c699bf3
-#define HASH_HTTP_COOKIE_VARS   0x93ad0d6f
-#define HASH_HTTP_ENV_VARS      0x84da3016
-#define HASH_HTTP_SERVER_VARS   0x6dbf964e
-#define HASH_HTTP_SESSION_VARS  0x322906f5
-#define HASH_HTTP_POST_FILES    0xe4e4ce70
-#define HASH_HTTP_RAW_POST_DATA 0xe6137a0e
-#endif
 
 
 /* {{{ normalize_varname
@@ -146,7 +126,7 @@ static void suhosin_server_strip(HashTable *arr, char *key, int klen)
 	if (zend_hash_find(arr, key, klen, (void **) &tzval) == SUCCESS &&
 			Z_TYPE_PP(tzval) == IS_STRING) {
 		
-		s = t = Z_STRVAL_PP(tzval);
+		s = t = (unsigned char *)Z_STRVAL_PP(tzval);
 		for (; *t; t++) {
 			if (suhosin_is_dangerous_char[*t]) {
 				*t = '?';
@@ -168,7 +148,7 @@ static void suhosin_server_encode(HashTable *arr, char *key, int klen)
 	if (zend_hash_find(arr, key, klen, (void **) &tzval) == SUCCESS &&
 			Z_TYPE_PP(tzval) == IS_STRING) {
 		
-		temp = Z_STRVAL_PP(tzval);
+		temp = (unsigned char *)Z_STRVAL_PP(tzval);
 		
 		t = temp;
 		for (t = temp; *t; t++) {
@@ -195,7 +175,8 @@ static void suhosin_server_encode(HashTable *arr, char *key, int klen)
 		}
 		*n = 0;
 		
-		Z_STRVAL_PP(tzval) = newv;
+		/* XXX: we leak memory here, but only for the duration of the request */
+		Z_STRVAL_PP(tzval) = (char *)newv;
 		Z_STRLEN_PP(tzval) = n-newv;
 	}
 }
@@ -208,26 +189,26 @@ void suhosin_register_server_variables(zval *track_vars_array TSRMLS_DC)
         HashTable *svars;
         int retval, failure=0;
         
-        orig_register_server_variables(track_vars_array TSRMLS_CC);
+		orig_register_server_variables(track_vars_array TSRMLS_CC);
 
         svars = Z_ARRVAL_P(track_vars_array);
         
 	if (!SUHOSIN_G(simulation)) {
-    		retval = zend_hash_del_key_or_index(svars, "HTTP_GET_VARS", sizeof("HTTP_GET_VARS"), HASH_HTTP_GET_VARS, HASH_DEL_INDEX);
+    		retval = zend_hash_del(svars, "HTTP_GET_VARS", sizeof("HTTP_GET_VARS"));
     		if (retval == SUCCESS) failure = 1;
-    		retval = zend_hash_del_key_or_index(svars, "HTTP_POST_VARS", sizeof("HTTP_POST_VARS"), HASH_HTTP_POST_VARS, HASH_DEL_INDEX);
+    		retval = zend_hash_del(svars, "HTTP_POST_VARS", sizeof("HTTP_POST_VARS"));
     		if (retval == SUCCESS) failure = 1;
-    		retval = zend_hash_del_key_or_index(svars, "HTTP_COOKIE_VARS", sizeof("HTTP_COOKIE_VARS"), HASH_HTTP_COOKIE_VARS, HASH_DEL_INDEX);
+    		retval = zend_hash_del(svars, "HTTP_COOKIE_VARS", sizeof("HTTP_COOKIE_VARS"));
     		if (retval == SUCCESS) failure = 1;
-    		retval = zend_hash_del_key_or_index(svars, "HTTP_ENV_VARS", sizeof("HTTP_ENV_VARS"), HASH_HTTP_ENV_VARS, HASH_DEL_INDEX);
+    		retval = zend_hash_del(svars, "HTTP_ENV_VARS", sizeof("HTTP_ENV_VARS"));
     		if (retval == SUCCESS) failure = 1;
-    		retval = zend_hash_del_key_or_index(svars, "HTTP_SERVER_VARS", sizeof("HTTP_SERVER_VARS"), HASH_HTTP_SERVER_VARS, HASH_DEL_INDEX);
+    		retval = zend_hash_del(svars, "HTTP_SERVER_VARS", sizeof("HTTP_SERVER_VARS"));
     		if (retval == SUCCESS) failure = 1;
-    		retval = zend_hash_del_key_or_index(svars, "HTTP_SESSION_VARS", sizeof("HTTP_SESSION_VARS"), HASH_HTTP_SESSION_VARS, HASH_DEL_INDEX);
+    		retval = zend_hash_del(svars, "HTTP_SESSION_VARS", sizeof("HTTP_SESSION_VARS"));
     		if (retval == SUCCESS) failure = 1;
-    		retval = zend_hash_del_key_or_index(svars, "HTTP_POST_FILES", sizeof("HTTP_POST_FILES"), HASH_HTTP_POST_FILES, HASH_DEL_INDEX);
-		if (retval == SUCCESS) failure = 1;
-    		retval = zend_hash_del_key_or_index(svars, "HTTP_RAW_POST_DATA", sizeof("HTTP_RAW_POST_DATA"), HASH_HTTP_RAW_POST_DATA, HASH_DEL_INDEX);
+    		retval = zend_hash_del(svars, "HTTP_POST_FILES", sizeof("HTTP_POST_FILES"));
+    		if (retval == SUCCESS) failure = 1;
+    		retval = zend_hash_del(svars, "HTTP_RAW_POST_DATA", sizeof("HTTP_RAW_POST_DATA"));
     		if (retval == SUCCESS) failure = 1;
 	} else {
 		retval = zend_hash_exists(svars, "HTTP_GET_VARS", sizeof("HTTP_GET_VARS"));
@@ -268,6 +249,7 @@ void suhosin_register_server_variables(zval *track_vars_array TSRMLS_DC)
 		suhosin_server_strip(svars, "PHP_SELF", sizeof("PHP_SELF"));
 		suhosin_server_strip(svars, "PATH_INFO", sizeof("PATH_INFO"));
 		suhosin_server_strip(svars, "PATH_TRANSLATED", sizeof("PATH_TRANSLATED"));
+		suhosin_server_strip(svars, "HTTP_USER_AGENT", sizeof("HTTP_USER_AGENT"));
 	}
 }
 /* }}} */
@@ -325,16 +307,22 @@ unsigned int suhosin_input_filter(int arg, char *var, char **val, unsigned int v
 	/* Drop this variable if the limit was reached */
         switch (arg) {
             case PARSE_GET:
+                        SUHOSIN_G(att_get_vars)++;
+                        SUHOSIN_G(att_request_variables)++;
                         if (SUHOSIN_G(no_more_get_variables)) {
                                 return 0;
                         }
                         break;
             case PARSE_POST:
+                        SUHOSIN_G(att_post_vars)++;
+                        SUHOSIN_G(att_request_variables)++;
                         if (SUHOSIN_G(no_more_post_variables)) {
                                 return 0;
                         }
                         break;
             case PARSE_COOKIE:
+                        SUHOSIN_G(att_cookie_vars)++;
+                        SUHOSIN_G(att_request_variables)++;
                         if (SUHOSIN_G(no_more_cookie_variables)) {
                                 return 0;
                         }
@@ -350,7 +338,7 @@ unsigned int suhosin_input_filter(int arg, char *var, char **val, unsigned int v
 	switch (arg) {
 	    case PARSE_GET:
 			if (SUHOSIN_G(max_get_vars) && SUHOSIN_G(max_get_vars) <= SUHOSIN_G(cur_get_vars)) {
-				suhosin_log(S_VARS, "configured GET variable limit exceeded - dropped variable '%s'", var);
+				suhosin_log(S_VARS, "configured GET variable limit exceeded - dropped variable '%s' - all further GET variables are dropped", var);
 				if (!SUHOSIN_G(simulation)) {
                             		SUHOSIN_G(no_more_get_variables) = 1;
 					return 0;
@@ -359,7 +347,7 @@ unsigned int suhosin_input_filter(int arg, char *var, char **val, unsigned int v
 			break;
 	    case PARSE_COOKIE:
 			if (SUHOSIN_G(max_cookie_vars) && SUHOSIN_G(max_cookie_vars) <= SUHOSIN_G(cur_cookie_vars)) {
-				suhosin_log(S_VARS, "configured COOKIE variable limit exceeded - dropped variable '%s'", var);
+				suhosin_log(S_VARS, "configured COOKIE variable limit exceeded - dropped variable '%s' - all further COOKIE variables are dropped", var);
 				if (!SUHOSIN_G(simulation)) {
                             		SUHOSIN_G(no_more_cookie_variables) = 1;
 					return 0;
@@ -368,7 +356,7 @@ unsigned int suhosin_input_filter(int arg, char *var, char **val, unsigned int v
 			break;
 	    case PARSE_POST:
 			if (SUHOSIN_G(max_post_vars) && SUHOSIN_G(max_post_vars) <= SUHOSIN_G(cur_post_vars)) {
-				suhosin_log(S_VARS, "configured POST variable limit exceeded - dropped variable '%s'", var);
+				suhosin_log(S_VARS, "configured POST variable limit exceeded - dropped variable '%s' - all further POST variables are dropped", var);
 				if (!SUHOSIN_G(simulation)) {
                             		SUHOSIN_G(no_more_post_variables) = 1;
                             		return 0;
@@ -476,7 +464,7 @@ unsigned int suhosin_input_filter(int arg, char *var, char **val, unsigned int v
 					return 0;
 				}
 			}
-			if (SUHOSIN_G(max_get_totalname_length) && SUHOSIN_G(max_get_totalname_length) < var_len) {
+			if (SUHOSIN_G(max_get_totalname_length) && SUHOSIN_G(max_get_totalname_length) < total_len) {
 				suhosin_log(S_VARS, "configured GET variable total name length limit exceeded - dropped variable '%s'", var);
 				if (!SUHOSIN_G(simulation)) {
 					return 0;
@@ -490,7 +478,7 @@ unsigned int suhosin_input_filter(int arg, char *var, char **val, unsigned int v
 					return 0;
 				}
 			}
-			if (SUHOSIN_G(max_cookie_totalname_length) && SUHOSIN_G(max_cookie_totalname_length) < var_len) {
+			if (SUHOSIN_G(max_cookie_totalname_length) && SUHOSIN_G(max_cookie_totalname_length) < total_len) {
 				suhosin_log(S_VARS, "configured COOKIE variable total name length limit exceeded - dropped variable '%s'", var);
 				if (!SUHOSIN_G(simulation)) {
 					return 0;
@@ -504,7 +492,7 @@ unsigned int suhosin_input_filter(int arg, char *var, char **val, unsigned int v
 					return 0;
 				}
 			}
-			if (SUHOSIN_G(max_post_totalname_length) && SUHOSIN_G(max_post_totalname_length) < var_len) {
+			if (SUHOSIN_G(max_post_totalname_length) && SUHOSIN_G(max_post_totalname_length) < total_len) {
 				suhosin_log(S_VARS, "configured POST variable total name length limit exceeded - dropped variable '%s'", var);
 				if (!SUHOSIN_G(simulation)) {
 					return 0;
@@ -515,49 +503,56 @@ unsigned int suhosin_input_filter(int arg, char *var, char **val, unsigned int v
 	
 	/* Find out array depth */
 	while (index) {
+		char *index_end;
 		unsigned int index_length;
 		
-		depth++;
-		index = strchr(index+1, '[');
+		/* overjump '[' */
+		index++;
 		
-		if (prev_index) {
-			index_length = index ? index - 1 - prev_index - 1: strlen(prev_index);
-			
-			if (SUHOSIN_G(max_array_index_length) && SUHOSIN_G(max_array_index_length) < index_length) {
-				suhosin_log(S_VARS, "configured request variable array index length limit exceeded - dropped variable '%s'", var);
-				if (!SUHOSIN_G(simulation)) {
-					return 0;
-				}
-			} 
-			switch (arg) {
-			    case PARSE_GET:
-					if (SUHOSIN_G(max_get_array_index_length) && SUHOSIN_G(max_get_array_index_length) < index_length) {
-						suhosin_log(S_VARS, "configured GET variable array index length limit exceeded - dropped variable '%s'", var);
-						if (!SUHOSIN_G(simulation)) {
-							return 0;
-						}
-					} 
-					break;
-			    case PARSE_COOKIE:
-					if (SUHOSIN_G(max_cookie_array_index_length) && SUHOSIN_G(max_cookie_array_index_length) < index_length) {
-						suhosin_log(S_VARS, "configured COOKIE variable array index length limit exceeded - dropped variable '%s'", var);
-						if (!SUHOSIN_G(simulation)) {
-							return 0;
-						}
-					} 
-					break;
-			    case PARSE_POST:
-					if (SUHOSIN_G(max_post_array_index_length) && SUHOSIN_G(max_post_array_index_length) < index_length) {
-						suhosin_log(S_VARS, "configured POST variable array index length limit exceeded - dropped variable '%s'", var);
-						if (!SUHOSIN_G(simulation)) {
-							return 0;
-						}
-					} 
-					break;
-			}
-			prev_index = index;
+		/* increase array depth */
+		depth++;
+				
+		index_end = strchr(index, ']');
+		if (index_end == NULL) {
+			index_end = index+strlen(index);
 		}
 		
+		index_length = index_end - index;
+			
+		if (SUHOSIN_G(max_array_index_length) && SUHOSIN_G(max_array_index_length) < index_length) {
+			suhosin_log(S_VARS, "configured request variable array index length limit exceeded - dropped variable '%s'", var);
+			if (!SUHOSIN_G(simulation)) {
+				return 0;
+			}
+		} 
+		switch (arg) {
+		    case PARSE_GET:
+				if (SUHOSIN_G(max_get_array_index_length) && SUHOSIN_G(max_get_array_index_length) < index_length) {
+					suhosin_log(S_VARS, "configured GET variable array index length limit exceeded - dropped variable '%s'", var);
+					if (!SUHOSIN_G(simulation)) {
+						return 0;
+					}
+				} 
+				break;
+		    case PARSE_COOKIE:
+				if (SUHOSIN_G(max_cookie_array_index_length) && SUHOSIN_G(max_cookie_array_index_length) < index_length) {
+					suhosin_log(S_VARS, "configured COOKIE variable array index length limit exceeded - dropped variable '%s'", var);
+					if (!SUHOSIN_G(simulation)) {
+						return 0;
+					}
+				} 
+				break;
+		    case PARSE_POST:
+				if (SUHOSIN_G(max_post_array_index_length) && SUHOSIN_G(max_post_array_index_length) < index_length) {
+					suhosin_log(S_VARS, "configured POST variable array index length limit exceeded - dropped variable '%s'", var);
+					if (!SUHOSIN_G(simulation)) {
+						return 0;
+					}
+				} 
+				break;
+		}
+		
+		index = strchr(index, '[');
 	}
 	
 	/* Drop this variable if it exceeds the array depth limit */

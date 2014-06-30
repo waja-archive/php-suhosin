@@ -3,7 +3,7 @@
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
   | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007-2012 SektionEins GmbH                             |
+  | Copyright (c) 2007-2014 SektionEins GmbH                             |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -79,6 +79,7 @@ typedef struct _multipart_event_end {
 SAPI_POST_HANDLER_FUNC(suhosin_rfc1867_post_handler);
 
 void destroy_uploaded_files_hash(TSRMLS_D);
+extern PHP_SUHOSIN_API int (*old_rfc1867_callback)(unsigned int event, void *event_data, void **extra TSRMLS_DC);
 #if !HAVE_RFC1867_CALLBACK
 extern PHP_SUHOSIN_API int (*php_rfc1867_callback)(unsigned int event, void *event_data, void **extra TSRMLS_DC);
 #else

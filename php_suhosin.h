@@ -3,7 +3,7 @@
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
   | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007-2012 SektionEins GmbH                             |
+  | Copyright (c) 2007-2014 SektionEins GmbH                             |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -22,7 +22,7 @@
 #ifndef PHP_SUHOSIN_H
 #define PHP_SUHOSIN_H
 
-#define SUHOSIN_EXT_VERSION  "0.9.33"
+#define SUHOSIN_EXT_VERSION  "0.9.36"
 
 /*#define SUHOSIN_DEBUG*/
 #define SUHOSIN_LOG "/tmp/suhosin_log.txt"
@@ -102,6 +102,7 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 /*	request variables */
 	long  max_request_variables;
 	long  cur_request_variables;
+	long  att_request_variables;
 	long  max_varname_length;
 	long  max_totalname_length;
 	long  max_value_length;
@@ -112,6 +113,7 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 /*	cookie variables */
 	long  max_cookie_vars;
 	long  cur_cookie_vars;
+	long  att_cookie_vars;
 	long  max_cookie_name_length;
 	long  max_cookie_totalname_length;
 	long  max_cookie_value_length;
@@ -122,6 +124,7 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 /*	get variables */
 	long  max_get_vars;
 	long  cur_get_vars;
+	long  att_get_vars;
 	long  max_get_name_length;
 	long  max_get_totalname_length;
 	long  max_get_value_length;
@@ -132,6 +135,7 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 /*	post variables */
 	long  max_post_vars;
 	long  cur_post_vars;
+	long  att_post_vars;
 	long  max_post_name_length;
 	long  max_post_totalname_length;
 	long  max_post_value_length;
@@ -163,6 +167,7 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	long	log_syslog_priority;
 	long	log_script;
 	long	log_sapi;
+	long	log_stdout;
 	char	*log_scriptname;
 	long	log_phpscript;
 	char	*log_phpscriptname;
@@ -187,6 +192,7 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 
 /*	session */
 	void	*s_module;
+	void	*s_original_mod;
 	int 	(*old_s_read)(void **mod_data, const char *key, char **val, int *vallen TSRMLS_DC);
 	int	(*old_s_write)(void **mod_data, const char *key, const char *val, const int vallen TSRMLS_DC);
 	int	(*old_s_destroy)(void **mod_data, const char *key TSRMLS_DC);
@@ -233,6 +239,9 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	php_uint32   mt_state[625];
 	php_uint32   *mt_next;
 	int          mt_left;
+
+	char         *seedingkey;
+	zend_bool    reseed_every_request;
 
 	zend_bool r_is_seeded; 
 	zend_bool mt_is_seeded;
@@ -281,6 +290,7 @@ ZEND_END_MODULE_GLOBALS(suhosin)
 #define S_MAIL				(1<<7L)
 #define S_SESSION			(1<<8L)
 #define S_INTERNAL			(1<<29L)
+#define S_GETCALLER         (1<<30L)
 #define S_ALL (S_MEMORY | S_VARS | S_INCLUDE | S_FILES | S_MAIL | S_SESSION | S_MISC | S_SQL | S_EXECUTOR)
 #endif
 
@@ -308,7 +318,7 @@ char *suhosin_generate_key(char *key, zend_bool ua, zend_bool dr, long raddr, ch
 char *suhosin_cookie_decryptor(TSRMLS_D);
 char *suhosin_getenv(char *name, size_t name_len TSRMLS_DC);
 void suhosin_hook_post_handlers(TSRMLS_D);
-void suhosin_unhook_post_handlers();
+void suhosin_unhook_post_handlers(TSRMLS_D);
 void suhosin_hook_register_server_variables();
 void suhosin_hook_header_handler();
 void suhosin_unhook_header_handler();

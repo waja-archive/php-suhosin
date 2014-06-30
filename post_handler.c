@@ -3,7 +3,7 @@
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
   | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007-2012 SektionEins GmbH                             |
+  | Copyright (c) 2007-2014 SektionEins GmbH                             |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -32,57 +32,182 @@
 #include "php_content_types.h"
 #include "suhosin_rfc1867.h"
 #include "ext/standard/url.h"
+#include "ext/standard/php_smart_str.h"
+
 
 SAPI_POST_HANDLER_FUNC(suhosin_rfc1867_post_handler);
 
 
+#if PHP_VERSION_ID < 50600
 SAPI_POST_HANDLER_FUNC(suhosin_std_post_handler)
 {
-    char *var, *val, *e, *s, *p;
-    zval *array_ptr = (zval *) arg;
+	char *var, *val, *e, *s, *p;
+	zval *array_ptr = (zval *) arg;
+#if PHP_VERSION_ID >= 50311	
+	long count = 0;
+#endif
+	if (SG(request_info).post_data == NULL) {
+		return;
+	}	
 
-    if (SG(request_info).post_data==NULL) {
-        return;
-    }	
+	s = SG(request_info).post_data;
+	e = s + SG(request_info).post_data_length;
 
-    s = SG(request_info).post_data;
-    e = s + SG(request_info).post_data_length;
-
-    while (s < e && (p = memchr(s, '&', (e - s)))) {
+	while (s < e && (p = memchr(s, '&', (e - s)))) {
 last_value:
-        if ((val = memchr(s, '=', (p - s)))) { /* have a value */
-            unsigned int val_len, new_val_len;
-            var = s;
+		if ((val = memchr(s, '=', (p - s)))) { /* have a value */
+			unsigned int val_len, new_val_len;
 
-            php_url_decode(var, (val - s));
-            val++;
-            val_len = php_url_decode(val, (p - val));
-            val = estrndup(val, val_len);
-            if (suhosin_input_filter(PARSE_POST, var, &val, val_len, &new_val_len TSRMLS_CC)) {
-#ifdef ZEND_ENGINE_2
-                if (sapi_module.input_filter(PARSE_POST, var, &val, new_val_len, &new_val_len TSRMLS_CC)) {
+#if PHP_VERSION_ID >= 50311	
+			if (++count > PG(max_input_vars)) {
+				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Input variables exceeded %ld. To increase the limit change max_input_vars in php.ini.", PG(max_input_vars));
+				return;
+			}
 #endif
-                    php_register_variable_safe(var, val, new_val_len, array_ptr TSRMLS_CC);
-#ifdef ZEND_ENGINE_2
-                }
-#endif
-            } else {
-                SUHOSIN_G(abort_request)=1;
-            }
-            efree(val);
-        }
-        s = p + 1;
-    }
-    if (s < e) {
-        p = e;
-        goto last_value;
-    }
+			var = s;
+
+			php_url_decode(var, (val - s));
+			val++;
+			val_len = php_url_decode(val, (p - val));
+			val = estrndup(val, val_len);
+			if (suhosin_input_filter(PARSE_POST, var, &val, val_len, &new_val_len TSRMLS_CC)) {
+				if (sapi_module.input_filter(PARSE_POST, var, &val, new_val_len, &new_val_len TSRMLS_CC)) {
+					php_register_variable_safe(var, val, new_val_len, array_ptr TSRMLS_CC);
+				}
+			} else {
+				SUHOSIN_G(abort_request)=1;
+			}
+			efree(val);
+		}
+		s = p + 1;
+	}
+	if (s < e) {
+		p = e;
+		goto last_value;
+	}
 }
+#else
+typedef struct post_var_data {
+	smart_str str;
+	char *ptr;
+	char *end;
+	uint64_t cnt;
+} post_var_data_t;
+
+static zend_bool add_post_var(zval *arr, post_var_data_t *var, zend_bool eof TSRMLS_DC)
+{
+	char *ksep, *vsep;
+	size_t klen, vlen;
+	/* FIXME: string-size_t */
+	unsigned int new_vlen;
+
+	if (var->ptr >= var->end) {
+		return 0;
+	}
+
+	vsep = memchr(var->ptr, '&', var->end - var->ptr);
+	if (!vsep) {
+		if (!eof) {
+			return 0;
+		} else {
+			vsep = var->end;
+		}
+	}
+
+	ksep = memchr(var->ptr, '=', vsep - var->ptr);
+	if (ksep) {
+		*ksep = '\0';
+		/* "foo=bar&" or "foo=&" */
+		klen = ksep - var->ptr;
+		vlen = vsep - ++ksep;
+	} else {
+		ksep = "";
+		/* "foo&" */
+		klen = vsep - var->ptr;
+		vlen = 0;
+	}
+
+
+	php_url_decode(var->ptr, klen);
+	if (vlen) {
+		vlen = php_url_decode(ksep, vlen);
+	}
+
+	if (suhosin_input_filter(PARSE_POST, var->ptr, &ksep, vlen, &new_vlen TSRMLS_CC)) {
+		if (sapi_module.input_filter(PARSE_POST, var->ptr, &ksep, new_vlen, &new_vlen TSRMLS_CC)) {
+			php_register_variable_safe(var->ptr, ksep, new_vlen, arr TSRMLS_CC);
+		}
+	} else {
+		SUHOSIN_G(abort_request)=1;
+	}
+
+	var->ptr = vsep + (vsep != var->end);
+	return 1;
+}
+
+static inline int add_post_vars(zval *arr, post_var_data_t *vars, zend_bool eof TSRMLS_DC)
+{
+	uint64_t max_vars = PG(max_input_vars);
+
+	vars->ptr = vars->str.c;
+	vars->end = vars->str.c + vars->str.len;
+	while (add_post_var(arr, vars, eof TSRMLS_CC)) {
+		if (++vars->cnt > max_vars) {
+			php_error_docref(NULL TSRMLS_CC, E_WARNING,
+					"Input variables exceeded %" PRIu64 ". "
+					"To increase the limit change max_input_vars in php.ini.",
+					max_vars);
+			return FAILURE;
+		}
+	}
+
+	if (!eof) {
+		memmove(vars->str.c, vars->ptr, vars->str.len = vars->end - vars->ptr);
+	}
+	return SUCCESS;
+}
+
+SAPI_POST_HANDLER_FUNC(suhosin_std_post_handler)
+{
+	zval *arr = (zval *) arg;
+	php_stream *s = SG(request_info).request_body;
+	post_var_data_t post_data;
+
+	if (s && SUCCESS == php_stream_rewind(s)) {
+		memset(&post_data, 0, sizeof(post_data));
+
+		while (!php_stream_eof(s)) {
+			char buf[BUFSIZ] = {0};
+			size_t len = php_stream_read(s, buf, BUFSIZ);
+
+			if (len && len != (size_t) -1) {
+				smart_str_appendl(&post_data.str, buf, len);
+
+				if (SUCCESS != add_post_vars(arr, &post_data, 0 TSRMLS_CC)) {
+					if (post_data.str.c) {
+						efree(post_data.str.c);
+					}
+					return;
+				}
+			}
+
+			if (len != BUFSIZ){
+				break;
+			}
+		}
+
+		add_post_vars(arr, &post_data, 1 TSRMLS_CC);
+		if (post_data.str.c) {
+			efree(post_data.str.c);
+		}
+	}
+}
+#endif
 
 static void suhosin_post_handler_modification(sapi_post_entry *spe)
 {
 	char *content_type = estrndup(spe->content_type, spe->content_type_len);
-	suhosin_log(S_VARS, "some extension replaces the POST handler for %s - Suhosin's protection will be incomplete", content_type);
+	suhosin_log(S_VARS, "some extension replaces the POST handler for %s - Suhosin's protection might be incomplete", content_type);
 	efree(content_type);
 }
 
@@ -144,14 +269,15 @@ void suhosin_hook_post_handlers(TSRMLS_D)
 	sapi_unregister_post_entry(&suhosin_post_entries[1]);
 	sapi_register_post_entries(suhosin_post_entries);
 #endif
+
 	/* we want to get notified if another extension deregisters the suhosin post handlers */
 
 	/* we need to tell suhosin patch that there is a new valid destructor */
 	/* therefore we have create HashTable that has this destructor */
-	zend_hash_init(&tempht, 0, NULL, suhosin_post_handler_modification, 0);
+	zend_hash_init(&tempht, 0, NULL, (dtor_func_t)suhosin_post_handler_modification, 0);
 	zend_hash_destroy(&tempht);
 	/* And now we can overwrite the destructor for post entries */
-	SG(known_post_content_types).pDestructor = suhosin_post_handler_modification;
+	SG(known_post_content_types).pDestructor = (dtor_func_t)suhosin_post_handler_modification;
 	
 	/* we have to stop mbstring from replacing our post handler */
 	if (zend_hash_find(EG(ini_directives), "mbstring.encoding_translation", sizeof("mbstring.encoding_translation"), (void **) &ini_entry) == FAILURE) {
@@ -162,7 +288,7 @@ void suhosin_hook_post_handlers(TSRMLS_D)
 	ini_entry->on_modify = suhosin_OnUpdate_mbstring_encoding_translation;
 }
 
-void suhosin_unhook_post_handlers()
+void suhosin_unhook_post_handlers(TSRMLS_D)
 {
 	zend_ini_entry *ini_entry;
 

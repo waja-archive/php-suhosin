@@ -3,7 +3,7 @@
   | Suhosin Version 1                                                    |
   +----------------------------------------------------------------------+
   | Copyright (c) 2006-2007 The Hardened-PHP Project                     |
-  | Copyright (c) 2007-2012 SektionEins GmbH                             |
+  | Copyright (c) 2007-2014 SektionEins GmbH                             |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -38,6 +38,17 @@
 
 #include "sha256.h"
 
+#ifdef PHP_WIN32
+# include "win32/winutil.h"
+# include "win32/time.h"
+#else
+# include <sys/time.h>
+#endif
+
+#if PHP_VERSION_ID >= 50500
+static void (*old_execute_ex)(zend_execute_data *execute_data TSRMLS_DC);
+static void suhosin_execute_ex(zend_execute_data *execute_data TSRMLS_DC);
+#endif
 
 static void (*old_execute)(zend_op_array *op_array TSRMLS_DC);
 static void suhosin_execute(zend_op_array *op_array TSRMLS_DC);
@@ -48,8 +59,13 @@ static void *(*zo_set_oe_ex)(void *ptr) = NULL;
 /*STATIC zend_op_array* (*old_compile_file)(zend_file_handle* file_handle, int type TSRMLS_DC);
   STATIC zend_op_array* suhosin_compile_file(zend_file_handle*, int TSRMLS_DC);*/
 
+#if PHP_VERSION_ID >= 50500
+static void suhosin_execute_internal(zend_execute_data *execute_data_ptr, zend_fcall_info *fci, int return_value_used TSRMLS_DC);
+static void (*old_execute_internal)(zend_execute_data *execute_data_ptr, zend_fcall_info *fci, int return_value_used TSRMLS_DC);
+#else
 static void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int return_value_used TSRMLS_DC);
 static void (*old_execute_internal)(zend_execute_data *execute_data_ptr, int return_value_used TSRMLS_DC);
+#endif
 
 extern zend_extension suhosin_zend_extension_entry;
 
@@ -90,6 +106,7 @@ conts:
 #define SUHOSIN_CODE_TYPE_LONGNAME	13
 #define SUHOSIN_CODE_TYPE_MANYDOTS	14
 #define SUHOSIN_CODE_TYPE_WRITABLE      15
+#define SUHOSIN_CODE_TYPE_MBREGEXP	16
 
 static int suhosin_check_filename(char *s, int len TSRMLS_DC)
 {
@@ -152,7 +169,7 @@ SDEBUG("xxx %08x %08x",SUHOSIN_G(include_whitelist),SUHOSIN_G(include_blacklist)
 			t = h = (h == NULL) ? h2 : ( (h2 == NULL) ? h : ( (h < h2) ? h : h2 ) );
 			if (h == NULL) break;
 							
-			while (t > s && (isalnum(t[-1]) || t[-1]=='_')) {
+			while (t > s && (isalnum(t[-1]) || t[-1]=='_' || t[-1]=='.')) {
 				t--;
 			}
 			
@@ -195,7 +212,7 @@ SDEBUG("xxx %08x %08x",SUHOSIN_G(include_whitelist),SUHOSIN_G(include_blacklist)
 			t = h = (h == NULL) ? h2 : ( (h2 == NULL) ? h : ( (h < h2) ? h : h2 ) );
 			if (h == NULL) break;
 							
-			while (t > s && (isalnum(t[-1]) || t[-1]=='_')) {
+			while (t > s && (isalnum(t[-1]) || t[-1]=='_' || t[-1]=='.')) {
 				t--;
 			}
 
@@ -306,7 +323,7 @@ static int suhosin_detect_codetype(zend_op_array *op_array TSRMLS_DC)
 	char *s;
 	int r;
 
-	s = op_array->filename;
+	s = (char *)op_array->filename;
 	
 	/* eval, assert, create_function, preg_replace  */
 	if (op_array->type == ZEND_EVAL_CODE) {
@@ -323,6 +340,10 @@ static int suhosin_detect_codetype(zend_op_array *op_array TSRMLS_DC)
 			return SUHOSIN_CODE_TYPE_REGEXP;
 		}
 
+		if (strstr(s, "mbregex replace") != NULL) {
+			return SUHOSIN_CODE_TYPE_MBREGEXP;
+		}
+
 		if (strstr(s, "assert code") != NULL) {
 			return SUHOSIN_CODE_TYPE_ASSERT;
 		}
@@ -332,6 +353,18 @@ static int suhosin_detect_codetype(zend_op_array *op_array TSRMLS_DC)
 		}
 		
 		if (strstr(s, "Command line code") != NULL) {
+			return SUHOSIN_CODE_TYPE_COMMANDLINE;
+		}
+
+		if (strstr(s, "Command line begin code") != NULL) {
+			return SUHOSIN_CODE_TYPE_COMMANDLINE;
+		}
+
+		if (strstr(s, "Command line run code") != NULL) {
+			return SUHOSIN_CODE_TYPE_COMMANDLINE;
+		}
+
+		if (strstr(s, "Command line end code") != NULL) {
 			return SUHOSIN_CODE_TYPE_COMMANDLINE;
 		}
 		
@@ -355,8 +388,14 @@ static int suhosin_detect_codetype(zend_op_array *op_array TSRMLS_DC)
 
 /* {{{ void suhosin_execute_ex(zend_op_array *op_array TSRMLS_DC)
  *    This function provides a hook for execution */
+#if PHP_VERSION_ID > 50500
+static void suhosin_execute_ex(zend_execute_data *execute_data TSRMLS_DC)
+{
+	zend_op_array *op_array = execute_data->op_array;
+#else
 static void suhosin_execute_ex(zend_op_array *op_array, int zo, long dummy TSRMLS_DC)
 {
+#endif
 	zend_op_array *new_op_array;
 	int op_array_type, len;
 	char *fn;
@@ -364,88 +403,101 @@ static void suhosin_execute_ex(zend_op_array *op_array, int zo, long dummy TSRML
 	zend_uint orig_code_type;
 	unsigned long *suhosin_flags = NULL;
 	
-	if (SUHOSIN_G(abort_request) && !SUHOSIN_G(simulation) && SUHOSIN_G(filter_action)) {
-	
-		char *action = SUHOSIN_G(filter_action);
-		long code = -1;
+	/* log variable dropping statistics */
+	if (SUHOSIN_G(abort_request)) {
 		
-		SUHOSIN_G(abort_request) = 0; /* we do not want to endlessloop */
+		SUHOSIN_G(abort_request) = 0; /* we only want this to happen the first time */
 		
-		while (*action == ' ' || *action == '\t') action++;
+		if (SUHOSIN_G(att_request_variables)-SUHOSIN_G(cur_request_variables) > 0) {
+			suhosin_log(S_VARS, "dropped %u request variables - (%u in GET, %u in POST, %u in COOKIE)",
+			SUHOSIN_G(att_request_variables)-SUHOSIN_G(cur_request_variables),
+			SUHOSIN_G(att_get_vars)-SUHOSIN_G(cur_get_vars),
+			SUHOSIN_G(att_post_vars)-SUHOSIN_G(cur_post_vars),
+			SUHOSIN_G(att_cookie_vars)-SUHOSIN_G(cur_cookie_vars));
 		
-		if (*action >= '0' && *action <= '9') {
-			char *end = action;
-			while (*end && *end != ',' && *end != ';') end++;
-			code = zend_atoi(action, end-action);
-			action = end;
 		}
+	
+		if (!SUHOSIN_G(simulation) && SUHOSIN_G(filter_action)) {
+	
+			char *action = SUHOSIN_G(filter_action);
+			long code = -1;
+				
+			while (*action == ' ' || *action == '\t') action++;
 		
-		while (*action == ' ' || *action == '\t' || *action == ',' || *action == ';') action++;
+			if (*action >= '0' && *action <= '9') {
+				char *end = action;
+				while (*end && *end != ',' && *end != ';') end++;
+				code = zend_atoi(action, end-action);
+				action = end;
+			}
 		
-		if (*action) {
+			while (*action == ' ' || *action == '\t' || *action == ',' || *action == ';') action++;
+		
+			if (*action) {
 			
-			if (strncmp("http://", action, sizeof("http://")-1)==0) {
-				sapi_header_line ctr = {0};
+				if (strncmp("http://", action, sizeof("http://")-1)==0) {
+					sapi_header_line ctr = {0};
 				
-				if (code == -1) {
-					code = 302;
-				}
-				
-				ctr.line_len = spprintf(&ctr.line, 0, "Location: %s", action);
-				ctr.response_code = code;
-				sapi_header_op(SAPI_HEADER_REPLACE, &ctr TSRMLS_CC);
-				efree(ctr.line);
-			} else {
-				zend_file_handle file_handle;
-				zend_op_array *new_op_array;
-				zval *result = NULL;
-				
-				if (code == -1) {
-					code = 200;
-				}
-				
-#ifdef ZEND_ENGINE_2
-				if (zend_stream_open(action, &file_handle TSRMLS_CC) == SUCCESS) {
-#else
-				if (zend_open(action, &file_handle) == SUCCESS && ZEND_IS_VALID_FILE_HANDLE(&file_handle)) {
-					file_handle.filename = action;
-					file_handle.free_filename = 0;
-#endif		
-					if (!file_handle.opened_path) {
-						file_handle.opened_path = estrndup(action, strlen(action));
+					if (code == -1) {
+						code = 302;
 					}
-					new_op_array = zend_compile_file(&file_handle, ZEND_REQUIRE TSRMLS_CC);
-					zend_destroy_file_handle(&file_handle TSRMLS_CC);
-					if (new_op_array) {
-						EG(return_value_ptr_ptr) = &result;
-						EG(active_op_array) = new_op_array;
-						zend_execute(new_op_array TSRMLS_CC);
+				
+					ctr.line_len = spprintf(&ctr.line, 0, "Location: %s", action);
+					ctr.response_code = code;
+					sapi_header_op(SAPI_HEADER_REPLACE, &ctr TSRMLS_CC);
+					efree(ctr.line);
+				} else {
+					zend_file_handle file_handle;
+					zend_op_array *new_op_array;
+					zval *result = NULL;
+				
+					if (code == -1) {
+						code = 200;
+					}
+				
 #ifdef ZEND_ENGINE_2
-						destroy_op_array(new_op_array TSRMLS_CC);
+					if (zend_stream_open(action, &file_handle TSRMLS_CC) == SUCCESS) {
 #else
-						destroy_op_array(new_op_array);
-#endif
-						efree(new_op_array);
+					if (zend_open(action, &file_handle) == SUCCESS && ZEND_IS_VALID_FILE_HANDLE(&file_handle)) {
+						file_handle.filename = action;
+						file_handle.free_filename = 0;
+#endif		
+						if (!file_handle.opened_path) {
+							file_handle.opened_path = estrndup(action, strlen(action));
+						}
+						new_op_array = zend_compile_file(&file_handle, ZEND_REQUIRE TSRMLS_CC);
+						zend_destroy_file_handle(&file_handle TSRMLS_CC);
+						if (new_op_array) {
+							EG(return_value_ptr_ptr) = &result;
+							EG(active_op_array) = new_op_array;
+							zend_execute(new_op_array TSRMLS_CC);
 #ifdef ZEND_ENGINE_2
-						if (!EG(exception))
+							destroy_op_array(new_op_array TSRMLS_CC);
+#else
+							destroy_op_array(new_op_array);
 #endif
-						{
-							if (EG(return_value_ptr_ptr)) {
-								zval_ptr_dtor(EG(return_value_ptr_ptr));
-								EG(return_value_ptr_ptr) = NULL;
+							efree(new_op_array);
+#ifdef ZEND_ENGINE_2
+							if (!EG(exception))
+#endif
+							{
+								if (EG(return_value_ptr_ptr)) {
+									zval_ptr_dtor(EG(return_value_ptr_ptr));
+									EG(return_value_ptr_ptr) = NULL;
+								}
 							}
+						} else {
+							code = 500;
 						}
 					} else {
 						code = 500;
 					}
-				} else {
-					code = 500;
 				}
 			}
-		}
 		
-		sapi_header_op(SAPI_HEADER_SET_STATUS, (void *)code TSRMLS_CC);
-		zend_bailout();
+			sapi_header_op(SAPI_HEADER_SET_STATUS, (void *)code TSRMLS_CC);
+			zend_bailout();
+		}
 	}
 	
 	SDEBUG("%s %s", op_array->filename, op_array->function_name);
@@ -453,11 +505,11 @@ static void suhosin_execute_ex(zend_op_array *op_array, int zo, long dummy TSRML
 	SUHOSIN_G(execution_depth)++;
 	
 	if (SUHOSIN_G(max_execution_depth) && SUHOSIN_G(execution_depth) > SUHOSIN_G(max_execution_depth)) {
-		suhosin_log(S_EXECUTOR, "maximum execution depth reached - script terminated");
+		suhosin_log(S_EXECUTOR|S_GETCALLER, "maximum execution depth reached - script terminated");
 		suhosin_bailout(TSRMLS_C);
 	}
 	
-	fn = op_array->filename;
+	fn = (char *)op_array->filename;
 	len = strlen(fn);
 	
 	orig_code_type = SUHOSIN_G(in_code_type);
@@ -500,7 +552,7 @@ not_evaled_code:
 	switch (op_array_type) {
 	    case SUHOSIN_CODE_TYPE_EVAL:
 		    if (SUHOSIN_G(executor_disable_eval)) {
-			    suhosin_log(S_EXECUTOR, "use of eval is forbidden by configuration");
+			    suhosin_log(S_EXECUTOR|S_GETCALLER, "use of eval is forbidden by configuration");
 			    if (!SUHOSIN_G(simulation)) {
 				    zend_error(E_ERROR, "SUHOSIN - Use of eval is forbidden by configuration");
 			    }
@@ -509,13 +561,17 @@ not_evaled_code:
 		    
 	    case SUHOSIN_CODE_TYPE_REGEXP:
 		    if (SUHOSIN_G(executor_disable_emod)) {
-			    suhosin_log(S_EXECUTOR, "use of preg_replace() with /e modifier is forbidden by configuration");
+			    suhosin_log(S_EXECUTOR|S_GETCALLER, "use of preg_replace() with /e modifier is forbidden by configuration");
 			    if (!SUHOSIN_G(simulation)) {
 				    zend_error(E_ERROR, "SUHOSIN - Use of preg_replace() with /e modifier is forbidden by configuration");
 			    }
 		    }
 		    break;
 		    
+		case SUHOSIN_CODE_TYPE_MBREGEXP:
+			/* XXX TODO: Do we want to disallow this, too? */
+			break;
+		
 	    case SUHOSIN_CODE_TYPE_ASSERT:
 		    break;
 		    
@@ -523,37 +579,37 @@ not_evaled_code:
 		    break;
 		    
 		case SUHOSIN_CODE_TYPE_LONGNAME:
-			suhosin_log(S_INCLUDE, "Include filename ('%s') is too long", op_array->filename);
+			suhosin_log(S_INCLUDE|S_GETCALLER, "Include filename ('%s') is too long", op_array->filename);
 			suhosin_bailout(TSRMLS_C);
 			break;
 
 		case SUHOSIN_CODE_TYPE_MANYDOTS:
-			suhosin_log(S_INCLUDE, "Include filename ('%s') contains too many '../'", op_array->filename);
+			suhosin_log(S_INCLUDE|S_GETCALLER, "Include filename ('%s') contains too many '../'", op_array->filename);
 			suhosin_bailout(TSRMLS_C);
 			break;
 	    
 		case SUHOSIN_CODE_TYPE_UPLOADED:
-		    suhosin_log(S_INCLUDE, "Include filename is an uploaded file");
+		    suhosin_log(S_INCLUDE|S_GETCALLER, "Include filename is an uploaded file");
 		    suhosin_bailout(TSRMLS_C);
 		    break;
 		    
 	    case SUHOSIN_CODE_TYPE_0FILE:
-			suhosin_log(S_INCLUDE, "Include filename contains an ASCIIZ character");
+			suhosin_log(S_INCLUDE|S_GETCALLER, "Include filename contains an ASCIIZ character");
 			suhosin_bailout(TSRMLS_C);
 			break;
 			
     		case SUHOSIN_CODE_TYPE_WRITABLE:
-    		        suhosin_log(S_INCLUDE, "Include filename ('%s') is writable by PHP process", op_array->filename);
+    		        suhosin_log(S_INCLUDE|S_GETCALLER, "Include filename ('%s') is writable by PHP process", op_array->filename);
     			suhosin_bailout(TSRMLS_C);
     			break;		    	
 
 	    case SUHOSIN_CODE_TYPE_BLACKURL:
-			suhosin_log(S_INCLUDE, "Include filename ('%s') is an URL that is forbidden by the blacklist", op_array->filename);
+			suhosin_log(S_INCLUDE|S_GETCALLER, "Include filename ('%s') is an URL that is forbidden by the blacklist", op_array->filename);
 			suhosin_bailout(TSRMLS_C);
 			break;
 			
 	    case SUHOSIN_CODE_TYPE_BADURL:
-			suhosin_log(S_INCLUDE, "Include filename ('%s') is an URL that is not allowed", op_array->filename);
+			suhosin_log(S_INCLUDE|S_GETCALLER, "Include filename ('%s') is an URL that is not allowed", op_array->filename);
 		    suhosin_bailout(TSRMLS_C);
 			break;
 
@@ -579,17 +635,22 @@ not_evaled_code:
 	}
 
 continue_execution:
+#if PHP_VERSION_ID >= 50500
+	old_execute_ex (execute_data TSRMLS_CC);
+#else
 	if (zo) {
 		old_execute_ZO (op_array, dummy TSRMLS_CC);
 	} else {
 		old_execute (op_array TSRMLS_CC);
 	}
+#endif
 	/* nothing to do */
 	SUHOSIN_G(in_code_type) = orig_code_type;
 	SUHOSIN_G(execution_depth)--;
 }
 /* }}} */
 
+#if PHP_VERSION_ID < 50500
 /* {{{ void suhosin_execute(zend_op_array *op_array TSRMLS_DC)
  *    This function provides a hook for execution */
 static void suhosin_execute(zend_op_array *op_array TSRMLS_DC)
@@ -604,11 +665,17 @@ static void suhosin_execute_ZO(zend_op_array *op_array, long dummy TSRMLS_DC)
 	suhosin_execute_ex(op_array, 1, dummy TSRMLS_CC);
 }	
 /* }}} */
+#endif
 
-
+#if PHP_VERSION_ID >= 50500
+#define IH_HANDLER_PARAMS_REST int ht, zval *return_value, zval **return_value_ptr, zval *this_ptr, int return_value_used TSRMLS_DC
+#define IH_HANDLER_PARAMS internal_function_handler *ih, IH_HANDLER_PARAMS_REST
+#define IH_HANDLER_PARAM_PASSTHRU ih, ht, return_value, return_value_ptr, this_ptr, return_value_used TSRMLS_CC
+#else
 #define IH_HANDLER_PARAMS_REST zend_execute_data *execute_data_ptr, int return_value_used, int ht, zval *return_value TSRMLS_DC
 #define IH_HANDLER_PARAMS internal_function_handler *ih, IH_HANDLER_PARAMS_REST
 #define IH_HANDLER_PARAM_PASSTHRU ih, execute_data_ptr, return_value_used, ht, return_value TSRMLS_CC
+#endif
 
 HashTable ihandler_table;
 
@@ -627,11 +694,11 @@ int ih_preg_replace(IH_HANDLER_PARAMS)
 	zval **regex,
 	     **replace,
 	     **subject,
-	     **limit;
+	     **limit, **zcount;
 
-	if (ZEND_NUM_ARGS() < 3 || zend_get_parameters_ex(3, &regex, &replace, &subject, &limit) == FAILURE) {
-		return (0);
-	}
+	 if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ZZZ|ZZ", &regex, &replace, &subject, &limit, &zcount) == FAILURE) {
+	 	return(0);
+	 }
 		
 	if (Z_TYPE_PP(regex) == IS_ARRAY) {
 		zval	**regex_entry;
@@ -1022,50 +1089,6 @@ int ih_fixusername(IH_HANDLER_PARAMS)
 	return (0);
 }
 
-static int suhosin_php_body_write(const char *str, uint str_length TSRMLS_DC)
-{
-#define P_META_ROBOTS "<meta name=\"ROBOTS\" content=\"NOINDEX,NOFOLLOW,NOARCHIVE\" />"
-#define S_META_ROBOTS "<meta name=\"ROBOTS\" content=\"NOINDEX,FOLLOW,NOARCHIVE\" />"
-
-    SDEBUG("bw: %s", str);
-
-	if ((str_length == sizeof("</head>\n")-1) && (strcmp(str, "</head>\n")==0)) {
-		SUHOSIN_G(old_php_body_write)(S_META_ROBOTS, sizeof(S_META_ROBOTS)-1 TSRMLS_CC);
-		OG(php_body_write) = SUHOSIN_G(old_php_body_write);
-		return SUHOSIN_G(old_php_body_write)(str, str_length TSRMLS_CC);
-	} else if ((str_length == sizeof(P_META_ROBOTS)-1) && (strcmp(str, P_META_ROBOTS)==0)) {
-		return str_length;
-	}
-	return SUHOSIN_G(old_php_body_write)(str, str_length TSRMLS_CC);	
-}
-
-static int ih_phpinfo(IH_HANDLER_PARAMS)
-{
-    int argc = ZEND_NUM_ARGS();
-	long flag;
-
-	if (zend_parse_parameters(argc TSRMLS_CC, "|l", &flag) == FAILURE) {
-        RETVAL_FALSE;
-		return (1);
-	}
-
-	if(!argc) {
-		flag = PHP_INFO_ALL;
-	}
-
-	/* Andale!  Andale!  Yee-Hah! */
-	php_start_ob_buffer(NULL, 4096, 0 TSRMLS_CC);
-	if (!sapi_module.phpinfo_as_text) {
-		SUHOSIN_G(old_php_body_write) = OG(php_body_write);
-		OG(php_body_write) = suhosin_php_body_write;
-	}
-	php_print_info(flag TSRMLS_CC);
-	php_end_ob_buffer(1, 0 TSRMLS_CC);
-
-	RETVAL_TRUE;
-	return (1);
-}
-
 
 static int ih_function_exists(IH_HANDLER_PARAMS)
 {
@@ -1087,11 +1110,11 @@ static int ih_function_exists(IH_HANDLER_PARAMS)
 	zend_str_tolower(lcname, func_name_len);
 #else
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s", &lcname, &func_name_len) == FAILURE) {
-		return;
+		return (1);
 	}
 
 	/* Ignore leading "\" */
-	if (lcname[0] == '\\') {
+	if (func_name_len > 0 && lcname[0] == '\\') {
 		lcname = &lcname[1];
 		func_name_len--;
 	}
@@ -1100,8 +1123,6 @@ static int ih_function_exists(IH_HANDLER_PARAMS)
 
 	retval = (zend_hash_find(EG(function_table), lcname, func_name_len+1, (void **)&func) == SUCCESS);
 	
-	efree(lcname);
-
 	/*
 	 * A bit of a hack, but not a bad one: we see if the handler of the function
 	 * is actually one that displays "function is disabled" message.
@@ -1133,6 +1154,8 @@ static int ih_function_exists(IH_HANDLER_PARAMS)
 		    retval = 0;
 		}
 	}
+
+	efree(lcname);
 
 	RETVAL_BOOL(retval);
 	return (1);
@@ -1309,8 +1332,9 @@ static php_uint32 suhosin_mt_rand(TSRMLS_D)
 
 /* {{{ suhosin_gen_entropy
  */
-static void suhosin_gen_entropy(php_uint32 *seedbuf TSRMLS_DC)
+static void suhosin_gen_entropy(php_uint32 *entropybuf TSRMLS_DC)
 {
+    php_uint32 seedbuf[20];
     /* On a modern OS code, stack and heap base are randomized */
     unsigned long code_value  = (unsigned long)suhosin_gen_entropy;
     unsigned long stack_value = (unsigned long)&code_value;
@@ -1337,14 +1361,21 @@ static void suhosin_gen_entropy(php_uint32 *seedbuf TSRMLS_DC)
     fd = VCWD_OPEN("/dev/urandom", O_RDONLY);
     if (fd >= 0) {
         /* ignore error case - if urandom doesn't give us any/enough random bytes */
-        read(fd, &seedbuf[6], 2 * sizeof(php_uint32));
+        read(fd, &seedbuf[6], 8 * sizeof(php_uint32));
         close(fd);
     }
+#else
+    /* we have to live with the possibility that this call fails */
+    php_win32_get_random_bytes(rbuf, 8 * sizeof(php_uint32));
 #endif
 
     suhosin_SHA256Init(&context);
-	suhosin_SHA256Update(&context, (void *) seedbuf, sizeof(php_uint32) * 8);
-	suhosin_SHA256Final(seedbuf, &context);
+    /* to our friends from Debian: yes this will add unitialized stack values to the entropy DO NOT REMOVE */
+    suhosin_SHA256Update(&context, (void *) seedbuf, sizeof(seedbuf));
+    if (SUHOSIN_G(seedingkey) != NULL && *SUHOSIN_G(seedingkey) != 0) {
+        suhosin_SHA256Update(&context, (unsigned char*)SUHOSIN_G(seedingkey), strlen(SUHOSIN_G(seedingkey)));
+    }
+    suhosin_SHA256Final((void *)entropybuf, &context);
 }
 /* }}} */
 
@@ -1421,6 +1452,9 @@ static int ih_srand(IH_HANDLER_PARAMS)
 	long seed;
 
 	if (zend_parse_parameters(argc TSRMLS_CC, "|l", &seed) == FAILURE || SUHOSIN_G(srand_ignore)) {
+    	if (SUHOSIN_G(srand_ignore)) {
+    		SUHOSIN_G(r_is_seeded) = 0;
+    	}
     	return (1);
     }
 
@@ -1438,6 +1472,9 @@ static int ih_mt_srand(IH_HANDLER_PARAMS)
 	long seed;
 
 	if (zend_parse_parameters(argc TSRMLS_CC, "|l", &seed) == FAILURE || SUHOSIN_G(mt_srand_ignore)) {
+    	if (SUHOSIN_G(mt_srand_ignore)) {
+    		SUHOSIN_G(mt_is_seeded) = 0;
+    	}
     	return (1);
     }
     
@@ -1501,7 +1538,7 @@ static int ih_getrandmax(IH_HANDLER_PARAMS)
 {
 #ifdef PHP_ATLEAST_5_3
 	if (zend_parse_parameters_none() == FAILURE) {
-		return;
+		return(0);
 	}
 #else
         int argc = ZEND_NUM_ARGS();
@@ -1518,7 +1555,6 @@ internal_function_handler ihandlers[] = {
     { "preg_replace", ih_preg_replace, NULL, NULL, NULL },
     { "mail", ih_mail, NULL, NULL, NULL },
     { "symlink", ih_symlink, NULL, NULL, NULL },
-    { "phpinfo", ih_phpinfo, NULL, NULL, NULL },
 	
 	{ "srand", ih_srand, NULL, NULL, NULL },
 	{ "mt_srand", ih_mt_srand, NULL, NULL, NULL },
@@ -1577,19 +1613,44 @@ internal_function_handler ihandlers[] = {
 
 /* {{{ void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int return_value_used TSRMLS_DC)
  *    This function provides a hook for internal execution */
+#if PHP_VERSION_ID >= 50500
+#define EX_T(offset) (*EX_TMP_VAR(execute_data_ptr, offset))
+
+static void suhosin_execute_internal(zend_execute_data *execute_data_ptr, zend_fcall_info *fci, int return_value_used TSRMLS_DC)
+{
+	zval *return_value;
+	zval **return_value_ptr;
+	zval *this_ptr;
+	int ht;
+	
+	if (fci) {
+		return_value = *fci->retval_ptr_ptr;
+		return_value_ptr = fci->retval_ptr_ptr;
+		this_ptr = fci->object_ptr;
+		ht = fci->param_count;
+	} else {
+		temp_variable *ret = &EX_T(execute_data_ptr->opline->result.var);
+		zend_function *fbc = execute_data_ptr->function_state.function;
+		return_value = ret->var.ptr;
+		return_value_ptr = (fbc->common.fn_flags & ZEND_ACC_RETURN_REFERENCE) ? &ret->var.ptr : NULL;
+		this_ptr = execute_data_ptr->object;
+		ht = execute_data_ptr->opline->extended_value;
+	}	
+#else
 static void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int return_value_used TSRMLS_DC)
 {
+	zval *return_value;
+	int ht = execute_data_ptr->opline->extended_value;
+#endif
 	char *lcname;
 	int function_name_strlen, free_lcname = 0;
-	zval *return_value;
 	zend_class_entry *ce = NULL;
-	int ht;
 	internal_function_handler *ih;
 
 #ifdef ZEND_ENGINE_2
 	ce = ((zend_internal_function *) execute_data_ptr->function_state.function)->scope;
 #endif
-	lcname = ((zend_internal_function *) execute_data_ptr->function_state.function)->function_name;
+	lcname = (char *)((zend_internal_function *) execute_data_ptr->function_state.function)->function_name;
 	function_name_strlen = strlen(lcname);
 	
 	/* handle methodcalls correctly */
@@ -1604,13 +1665,18 @@ static void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int re
 		lcname[function_name_strlen] = 0;
 		zend_str_tolower(lcname, function_name_strlen);
 	}
-	
+
+#if PHP_VERSION_ID < 50500	
 #ifdef ZEND_ENGINE_2  
+# if PHP_VERSION_ID < 50400
 	return_value = (*(temp_variable *)((char *) execute_data_ptr->Ts + execute_data_ptr->opline->result.u.var)).var.ptr;
+# else
+	return_value = (*(temp_variable *)((char *) execute_data_ptr->Ts + execute_data_ptr->opline->result.var)).var.ptr;
+# endif
 #else
         return_value = execute_data_ptr->Ts[execute_data_ptr->opline->result.u.var].var.ptr;
 #endif
-	ht = execute_data_ptr->opline->extended_value;
+#endif
 
 	SDEBUG("function: %s", lcname);
 
@@ -1618,7 +1684,7 @@ static void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int re
 	
 		if (SUHOSIN_G(eval_whitelist) != NULL) {
 			if (!zend_hash_exists(SUHOSIN_G(eval_whitelist), lcname, function_name_strlen+1)) {
-				suhosin_log(S_EXECUTOR, "function outside of eval whitelist called: %s()", lcname);
+				suhosin_log(S_EXECUTOR|S_GETCALLER, "function outside of eval whitelist called: %s()", lcname);
 				if (!SUHOSIN_G(simulation)) {
 				        goto execute_internal_bailout;
         			} else {
@@ -1627,7 +1693,7 @@ static void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int re
 			}
 		} else if (SUHOSIN_G(eval_blacklist) != NULL) {
 			if (zend_hash_exists(SUHOSIN_G(eval_blacklist), lcname, function_name_strlen+1)) {
-				suhosin_log(S_EXECUTOR, "function within eval blacklist called: %s()", lcname);
+				suhosin_log(S_EXECUTOR|S_GETCALLER, "function within eval blacklist called: %s()", lcname);
 				if (!SUHOSIN_G(simulation)) {
 				        goto execute_internal_bailout;
         			} else {
@@ -1639,7 +1705,7 @@ static void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int re
 	
 	if (SUHOSIN_G(func_whitelist) != NULL) {
 		if (!zend_hash_exists(SUHOSIN_G(func_whitelist), lcname, function_name_strlen+1)) {
-			suhosin_log(S_EXECUTOR, "function outside of whitelist called: %s()", lcname);
+			suhosin_log(S_EXECUTOR|S_GETCALLER, "function outside of whitelist called: %s()", lcname);
 			if (!SUHOSIN_G(simulation)) {
 			        goto execute_internal_bailout;
 			} else {
@@ -1648,7 +1714,7 @@ static void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int re
 		}
 	} else if (SUHOSIN_G(func_blacklist) != NULL) {
 		if (zend_hash_exists(SUHOSIN_G(func_blacklist), lcname, function_name_strlen+1)) {
-			suhosin_log(S_EXECUTOR, "function within blacklist called: %s()", lcname);
+			suhosin_log(S_EXECUTOR|S_GETCALLER, "function within blacklist called: %s()", lcname);
 			if (!SUHOSIN_G(simulation)) {
 			        goto execute_internal_bailout;
 			} else {
@@ -1667,10 +1733,18 @@ static void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int re
 		}
 		
 		if (retval == 0) {
+#if PHP_VERSION_ID >= 50500
+			old_execute_internal(execute_data_ptr, fci, return_value_used TSRMLS_CC);
+#else
 			old_execute_internal(execute_data_ptr, return_value_used TSRMLS_CC);
+#endif
 		}
 	} else {
+#if PHP_VERSION_ID >= 50500
+		old_execute_internal(execute_data_ptr, fci, return_value_used TSRMLS_CC);
+#else
 		old_execute_internal(execute_data_ptr, return_value_used TSRMLS_CC);
+#endif
 	}
 	if (free_lcname == 1) {
 		efree(lcname);
@@ -1710,13 +1784,19 @@ static int function_lookup(zend_extension *extension)
 void suhosin_hook_execute(TSRMLS_D)
 {
 	internal_function_handler *ih;
-	
+
+#if PHP_VERSION_ID >= 50500
+	old_execute_ex = zend_execute_ex;
+	zend_execute_ex = suhosin_execute_ex;
+#else	
 	old_execute = zend_execute;
 	zend_execute = suhosin_execute;
+#endif
 	
 /*	old_compile_file = zend_compile_file;
 	zend_compile_file = suhosin_compile_file; */
 
+#if ZO_COMPATIBILITY_HACK_TEMPORARY_DISABLED
 	if (zo_set_oe_ex == NULL) {	
 		zo_set_oe_ex = (void *)DL_FETCH_SYMBOL(NULL, "zend_optimizer_set_oe_ex");
 	}
@@ -1727,6 +1807,7 @@ void suhosin_hook_execute(TSRMLS_D)
 	if (zo_set_oe_ex != NULL) {
 		old_execute_ZO = zo_set_oe_ex(suhosin_execute_ZO);
 	}
+#endif
 	
 	old_execute_internal = zend_execute_internal;
 	if (old_execute_internal == NULL) {
@@ -1761,12 +1842,18 @@ void suhosin_hook_execute(TSRMLS_D)
  */
 void suhosin_unhook_execute()
 {
+#if ZO_COMPATIBILITY_HACK_TEMPORARY_DISABLED
 	if (zo_set_oe_ex) {
 		zo_set_oe_ex(old_execute_ZO);
 	}
-	
+#endif
+
+#if PHP_VERSION_ID >= 50500	
+	zend_execute_ex = old_execute_ex;
+#else
 	zend_execute = old_execute;
-	
+#endif
+		
 /*	zend_compile_file = old_compile_file; */
 
 	if (old_execute_internal == execute_internal) {
