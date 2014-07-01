@@ -1,9 +1,11 @@
 php-suhosin (0.9.36-1) UNRELEASED; urgency=medium
 
   * [a0f5f76] Imported Upstream version 0.9.36
+    (Closes: #675312, #680145, #718145, #696470)
   * [d3689d3] Updating copyright
+  * [62a4dcf] Droping all patches, due new upstream
 
- -- Jan Wagner <waja@cyconet.org>  Mon, 30 Jun 2014 21:54:53 +0200
+ -- Jan Wagner <waja@cyconet.org>  Tue, 01 Jul 2014 10:29:16 +0200
 
 php-suhosin (0.9.33-4) UNRELEASED; urgency=low
 
