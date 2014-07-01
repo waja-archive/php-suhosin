@@ -1,0 +1,18 @@
+Description: Resetting the ini file to the default settings
+ ini file has not the default settings
+Author: Jan Wagner <waja@cyconet.org>
+Last-update: 2014-07.01
+
+diff --git a/suhosin.ini b/suhosin.ini
+index ce8e8e9..37168cb 100644
+--- a/suhosin.ini
++++ b/suhosin.ini
+@@ -224,7 +224,7 @@ suhosin.mail.protect = 1
+ ; Flag that decides if the transparent session encryption key depends on the
+ ; User-Agent field. (When activated this feature transparently adds a little
+ ; bit protection against session fixation/hijacking attacks)
+-;suhosin.session.cryptua = On
++;suhosin.session.cryptua = Off
+ 
+ ; Flag that decides if the transparent session encryption key depends on the
+ ; Documentroot field.
