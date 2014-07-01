@@ -4,8 +4,14 @@ php-suhosin (0.9.36-1) UNRELEASED; urgency=medium
     (Closes: #675312, #680145, #718145, #696470)
   * [d3689d3] Updating copyright
   * [62a4dcf] Droping all patches, due new upstream
+  * [934b535] Adding patch 10_ini_defaults to have default settings in ini file
+  * [10f6091] Add missing ini directives by 20_missing_ini_directives patch
+  * [5629234] travis-ci: Add Ondrejs php 5.4 repro to source lists
+  * [5ad4d64] Setting suhosin.mail.protect to defaults with
+    05_ini_set_suhosin.mail.protect_defaults
+  * [5d98fa3] Removing debian/suhosin.ini and upstream one
 
- -- Jan Wagner <waja@cyconet.org>  Tue, 01 Jul 2014 10:29:16 +0200
+ -- Jan Wagner <waja@cyconet.org>  Tue, 01 Jul 2014 14:58:53 +0200
 
 php-suhosin (0.9.33-4) UNRELEASED; urgency=low
 
