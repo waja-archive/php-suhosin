@@ -1,2 +1,4 @@
 version=3
-http://www.suhosin.org/stories/download.html http://download.suhosin.org/suhosin-(.*)\.tgz
+opts=downloadurlmangle=s/https/http/ \
+http://www.suhosin.org/stories/download.html \
+https://download.suhosin.org/suhosin-(.*)\.tgz
