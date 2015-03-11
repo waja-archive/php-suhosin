@@ -24,7 +24,7 @@ install:
 
 script:
     # build the debian package
-    - debuild -uc -us
+    - dpkg-buildpackage -uc -us
 
 #notifications:
 #  email: false
