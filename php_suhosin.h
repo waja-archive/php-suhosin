@@ -22,7 +22,7 @@
 #ifndef PHP_SUHOSIN_H
 #define PHP_SUHOSIN_H
 
-#define SUHOSIN_EXT_VERSION  "0.9.36"
+#define SUHOSIN_EXT_VERSION  "0.9.37-dev"
 
 /*#define SUHOSIN_DEBUG*/
 #define SUHOSIN_LOG "/tmp/suhosin_log.txt"
@@ -37,6 +37,10 @@
 #else
 #define SDEBUG(...)
 #endif    
+#endif
+
+#ifndef PHP_VERSION_ID
+#define PHP_VERSION_ID (PHP_MAJOR_VERSION * 10000 + PHP_MINOR_VERSION * 100 + PHP_RELEASE_VERSION)
 #endif
 
 extern zend_module_entry suhosin_module_entry;
@@ -66,6 +70,101 @@ PHP_MINFO_FUNCTION(suhosin);
 
 #include "ext/standard/basic_functions.h"
 
+static inline int suhosin_is_protected_varname(char *var, int var_len)
+{
+	switch (var_len) {
+		case 18:
+		if (memcmp(var, "HTTP_RAW_POST_DATA", 18)==0) goto protected_varname;
+		break;
+		case 17:
+		if (memcmp(var, "HTTP_SESSION_VARS", 17)==0) goto protected_varname;
+		break;
+		case 16:
+		if (memcmp(var, "HTTP_SERVER_VARS", 16)==0) goto protected_varname;
+		if (memcmp(var, "HTTP_COOKIE_VARS", 16)==0) goto protected_varname;
+		break;
+		case 15:
+		if (memcmp(var, "HTTP_POST_FILES", 15)==0) goto protected_varname;
+		break;
+		case 14:
+		if (memcmp(var, "HTTP_POST_VARS", 14)==0) goto protected_varname;
+		break;
+		case 13:
+		if (memcmp(var, "HTTP_GET_VARS", 13)==0) goto protected_varname;
+		if (memcmp(var, "HTTP_ENV_VARS", 13)==0) goto protected_varname;
+		break;
+		case 8:
+		if (memcmp(var, "_SESSION", 8)==0) goto protected_varname;
+		if (memcmp(var, "_REQUEST", 8)==0) goto protected_varname;
+		break;
+		case 7:
+		if (memcmp(var, "GLOBALS", 7)==0) goto protected_varname;
+		if (memcmp(var, "_COOKIE", 7)==0) goto protected_varname;
+		if (memcmp(var, "_SERVER", 7)==0) goto protected_varname;
+		break;
+		case 6:
+		if (memcmp(var, "_FILES", 6)==0) goto protected_varname;
+		break;
+		case 5:
+		if (memcmp(var, "_POST", 5)==0) goto protected_varname;
+		break;
+		case 4:
+		if (memcmp(var, "_ENV", 4)==0) goto protected_varname;
+		if (memcmp(var, "_GET", 4)==0) goto protected_varname;
+		break;
+	}
+
+	return 0;
+protected_varname:
+	return 1;
+}
+
+
+#if PHP_VERSION_ID < 50203
+static inline int php_varname_check(char *name, int name_len, zend_bool silent TSRMLS_DC) /* {{{ */
+{
+    if (name_len == sizeof("GLOBALS") - 1 && !memcmp(name, "GLOBALS", sizeof("GLOBALS") - 1)) {
+		if (!silent) {
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Attempted GLOBALS variable overwrite");
+		}
+        return FAILURE;
+    } else if (name[0] == '_' &&
+            (
+             (name_len == sizeof("_GET") - 1 && !memcmp(name, "_GET", sizeof("_GET") - 1)) ||
+             (name_len == sizeof("_POST") - 1 && !memcmp(name, "_POST", sizeof("_POST") - 1)) ||
+             (name_len == sizeof("_COOKIE") - 1 && !memcmp(name, "_COOKIE", sizeof("_COOKIE") - 1)) ||
+             (name_len == sizeof("_ENV") - 1 && !memcmp(name, "_ENV", sizeof("_ENV") - 1)) ||
+             (name_len == sizeof("_SERVER") - 1 && !memcmp(name, "_SERVER", sizeof("_SERVER") - 1)) ||
+             (name_len == sizeof("_SESSION") - 1 && !memcmp(name, "_SESSION", sizeof("_SESSION") - 1)) ||
+             (name_len == sizeof("_FILES") - 1  && !memcmp(name, "_FILES", sizeof("_FILES") - 1)) ||
+             (name_len == sizeof("_REQUEST") -1 && !memcmp(name, "_REQUEST", sizeof("_REQUEST") - 1))
+            )
+            ) {
+		if (!silent) {
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Attempted super-global (%s) variable overwrite", name);
+		}
+        return FAILURE;
+    } else if (name[0] == 'H' &&
+            (
+             (name_len == sizeof("HTTP_POST_VARS") - 1 && !memcmp(name, "HTTP_POST_VARS", sizeof("HTTP_POST_VARS") - 1)) ||
+             (name_len == sizeof("HTTP_GET_VARS") - 1 && !memcmp(name, "HTTP_GET_VARS", sizeof("HTTP_GET_VARS") - 1)) ||
+             (name_len == sizeof("HTTP_COOKIE_VARS") - 1 && !memcmp(name, "HTTP_COOKIE_VARS", sizeof("HTTP_COOKIE_VARS") - 1)) ||
+             (name_len == sizeof("HTTP_ENV_VARS") - 1 && !memcmp(name, "HTTP_ENV_VARS", sizeof("HTTP_ENV_VARS") - 1)) ||
+             (name_len == sizeof("HTTP_SERVER_VARS") - 1 && !memcmp(name, "HTTP_SERVER_VARS", sizeof("HTTP_SERVER_VARS") - 1)) ||
+             (name_len == sizeof("HTTP_SESSION_VARS") - 1 && !memcmp(name, "HTTP_SESSION_VARS", sizeof("HTTP_SESSION_VARS") - 1)) ||
+             (name_len == sizeof("HTTP_RAW_POST_DATA") - 1 && !memcmp(name, "HTTP_RAW_POST_DATA", sizeof("HTTP_RAW_POST_DATA") - 1)) ||
+             (name_len == sizeof("HTTP_POST_FILES") - 1 && !memcmp(name, "HTTP_POST_FILES", sizeof("HTTP_POST_FILES") - 1))
+            )
+            ) {
+		if (!silent) {
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Attempted long input array (%s) overwrite", name);
+		}
+        return FAILURE;
+    }
+	return SUCCESS;
+}
+#endif
+
 ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	zend_uint in_code_type;
 	long execution_depth;
@@ -76,15 +175,16 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	char *filter_action;
 	char *sql_user_prefix;
 	char *sql_user_postfix;
-	long	sql_comment;
-	long	sql_opencomment;
-	long	sql_union;
-	long	sql_mselect;
+	char *sql_user_match;
+	long sql_comment;
+	long sql_opencomment;
+	long sql_union;
+	long sql_mselect;
 	
 	long max_execution_depth;
 	zend_bool	abort_request;
 	long executor_include_max_traversal;
-        zend_bool executor_include_allow_writable_files;
+	zend_bool executor_include_allow_writable_files;
 
 
 	HashTable *include_whitelist;
@@ -108,6 +208,8 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	long  max_value_length;
 	long  max_array_depth;
 	long  max_array_index_length;
+	char* array_index_whitelist;
+	char* array_index_blacklist;
 	zend_bool  disallow_nul;
 	zend_bool  disallow_ws;
 /*	cookie variables */
@@ -150,13 +252,16 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	zend_bool  upload_disallow_elf;
 	zend_bool  upload_disallow_binary;
 	zend_bool  upload_remove_binary;
+#ifdef SUHOSIN_EXPERIMENTAL
+	zend_bool  upload_allow_utf8;
+#endif
 	char *upload_verification_script;
         
-        zend_bool  no_more_variables;
-        zend_bool  no_more_get_variables;
-        zend_bool  no_more_post_variables;
-        zend_bool  no_more_cookie_variables;
-        zend_bool  no_more_uploads;
+	zend_bool  no_more_variables;
+	zend_bool  no_more_get_variables;
+	zend_bool  no_more_post_variables;
+	zend_bool  no_more_cookie_variables;
+	zend_bool  no_more_uploads;
 
 
 
@@ -174,6 +279,7 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	zend_bool log_phpscript_is_safe;
 	long	log_file;
 	char	*log_filename;
+	zend_bool log_file_time;
 
 /*	header handler */
 	zend_bool allow_multiheader;
@@ -198,8 +304,8 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	int	(*old_s_destroy)(void **mod_data, const char *key TSRMLS_DC);
 
 	BYTE fi[24],ri[24];
-        WORD fkey[120];
-        WORD rkey[120];
+	WORD fkey[120];
+	WORD rkey[120];
 	
 	zend_bool	session_encrypt;
 	char*	session_cryptkey;
@@ -247,16 +353,16 @@ ZEND_BEGIN_MODULE_GLOBALS(suhosin)
 	zend_bool mt_is_seeded;
 
 	/* PERDIR Handling */
-        char *perdir;
-        zend_bool log_perdir;
-        zend_bool exec_perdir;
-        zend_bool get_perdir;
-        zend_bool post_perdir;
-        zend_bool cookie_perdir;
-        zend_bool request_perdir;
-        zend_bool upload_perdir;
-        zend_bool sql_perdir;
-        zend_bool misc_perdir;
+	char *perdir;
+	zend_bool log_perdir;
+	zend_bool exec_perdir;
+	zend_bool get_perdir;
+	zend_bool post_perdir;
+	zend_bool cookie_perdir;
+	zend_bool request_perdir;
+	zend_bool upload_perdir;
+	zend_bool sql_perdir;
+	zend_bool misc_perdir;
 
 ZEND_END_MODULE_GLOBALS(suhosin)
 
@@ -290,8 +396,11 @@ ZEND_END_MODULE_GLOBALS(suhosin)
 #define S_MAIL				(1<<7L)
 #define S_SESSION			(1<<8L)
 #define S_INTERNAL			(1<<29L)
-#define S_GETCALLER         (1<<30L)
 #define S_ALL (S_MEMORY | S_VARS | S_INCLUDE | S_FILES | S_MAIL | S_SESSION | S_MISC | S_SQL | S_EXECUTOR)
+#endif
+
+#ifndef S_GETCALLER
+#define S_GETCALLER         (1<<30L)
 #endif
 
 #define SUHOSIN_NORMAL	0
@@ -324,10 +433,10 @@ void suhosin_hook_header_handler();
 void suhosin_unhook_header_handler();
 void suhosin_hook_session(TSRMLS_D);
 void suhosin_unhook_session(TSRMLS_D);
-void suhosin_hook_sha256();
-void suhosin_hook_ex_imp();
+void suhosin_hook_sha256(TSRMLS_D);
+void suhosin_hook_ex_imp(TSRMLS_D);
 void suhosin_hook_treat_data();
-void suhosin_hook_memory_limit();
+void suhosin_hook_memory_limit(TSRMLS_D);
 void suhosin_hook_execute(TSRMLS_D);
 void suhosin_unhook_execute();
 void suhosin_aes_gentables();
@@ -340,6 +449,8 @@ extern unsigned int (*old_input_filter)(int arg, char *var, char **val, unsigned
 void normalize_varname(char *varname);
 int suhosin_rfc1867_filter(unsigned int event, void *event_data, void **extra TSRMLS_DC);
 void suhosin_bailout(TSRMLS_D);
+size_t suhosin_strnspn(const char *input, size_t n, const char *accept);
+size_t suhosin_strncspn(const char *input, size_t n, const char *reject);
 
 /* Add pseudo refcount macros for PHP version < 5.3 */
 #ifndef Z_REFCOUNT_PP

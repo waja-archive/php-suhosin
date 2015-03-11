@@ -29,9 +29,37 @@
 #include "ext/standard/info.h"
 #include "php_suhosin.h"
 #include "php_variables.h"
+#include "ext/standard/php_var.h"
 
 
 static void (*orig_register_server_variables)(zval *track_vars_array TSRMLS_DC) = NULL;
+
+#if !HAVE_STRNLEN
+static size_t strnlen(const char *s, size_t maxlen) {
+	char *r = memchr(s, '\0', maxlen);
+	return r ? r-s : maxlen;
+}
+#endif
+
+size_t suhosin_strnspn(const char *input, size_t n, const char *accept)
+{
+	size_t count = 0;
+	for (; *input != '\0' && count < n; input++, count++) {
+		if (strchr(accept, *input) == NULL)
+			break;
+	}
+	return count;
+}
+
+size_t suhosin_strncspn(const char *input, size_t n, const char *reject)
+{
+	size_t count = 0;
+	for (; *input != '\0' && count < n; input++, count++) {
+		if (strchr(reject, *input) != NULL)
+			break;
+	}
+	return count;
+}
 
 
 /* {{{ normalize_varname
@@ -150,7 +178,6 @@ static void suhosin_server_encode(HashTable *arr, char *key, int klen)
 		
 		temp = (unsigned char *)Z_STRVAL_PP(tzval);
 		
-		t = temp;
 		for (t = temp; *t; t++) {
 			if (suhosin_is_dangerous_char[*t]) {
 				extra += 2;
@@ -186,30 +213,29 @@ static void suhosin_server_encode(HashTable *arr, char *key, int klen)
  */
 void suhosin_register_server_variables(zval *track_vars_array TSRMLS_DC)
 {
-        HashTable *svars;
-        int retval, failure=0;
-        
-		orig_register_server_variables(track_vars_array TSRMLS_CC);
+	HashTable *svars;
+	int retval = 0, failure = 0;
 
-        svars = Z_ARRVAL_P(track_vars_array);
-        
+	orig_register_server_variables(track_vars_array TSRMLS_CC);
+
+	svars = Z_ARRVAL_P(track_vars_array);
 	if (!SUHOSIN_G(simulation)) {
-    		retval = zend_hash_del(svars, "HTTP_GET_VARS", sizeof("HTTP_GET_VARS"));
-    		if (retval == SUCCESS) failure = 1;
-    		retval = zend_hash_del(svars, "HTTP_POST_VARS", sizeof("HTTP_POST_VARS"));
-    		if (retval == SUCCESS) failure = 1;
-    		retval = zend_hash_del(svars, "HTTP_COOKIE_VARS", sizeof("HTTP_COOKIE_VARS"));
-    		if (retval == SUCCESS) failure = 1;
-    		retval = zend_hash_del(svars, "HTTP_ENV_VARS", sizeof("HTTP_ENV_VARS"));
-    		if (retval == SUCCESS) failure = 1;
-    		retval = zend_hash_del(svars, "HTTP_SERVER_VARS", sizeof("HTTP_SERVER_VARS"));
-    		if (retval == SUCCESS) failure = 1;
-    		retval = zend_hash_del(svars, "HTTP_SESSION_VARS", sizeof("HTTP_SESSION_VARS"));
-    		if (retval == SUCCESS) failure = 1;
-    		retval = zend_hash_del(svars, "HTTP_POST_FILES", sizeof("HTTP_POST_FILES"));
-    		if (retval == SUCCESS) failure = 1;
-    		retval = zend_hash_del(svars, "HTTP_RAW_POST_DATA", sizeof("HTTP_RAW_POST_DATA"));
-    		if (retval == SUCCESS) failure = 1;
+		retval = zend_hash_del(svars, "HTTP_GET_VARS", sizeof("HTTP_GET_VARS"));
+		if (retval == SUCCESS) failure = 1;
+		retval = zend_hash_del(svars, "HTTP_POST_VARS", sizeof("HTTP_POST_VARS"));
+		if (retval == SUCCESS) failure = 1;
+		retval = zend_hash_del(svars, "HTTP_COOKIE_VARS", sizeof("HTTP_COOKIE_VARS"));
+		if (retval == SUCCESS) failure = 1;
+		retval = zend_hash_del(svars, "HTTP_ENV_VARS", sizeof("HTTP_ENV_VARS"));
+		if (retval == SUCCESS) failure = 1;
+		retval = zend_hash_del(svars, "HTTP_SERVER_VARS", sizeof("HTTP_SERVER_VARS"));
+		if (retval == SUCCESS) failure = 1;
+		retval = zend_hash_del(svars, "HTTP_SESSION_VARS", sizeof("HTTP_SESSION_VARS"));
+		if (retval == SUCCESS) failure = 1;
+		retval = zend_hash_del(svars, "HTTP_POST_FILES", sizeof("HTTP_POST_FILES"));
+		if (retval == SUCCESS) failure = 1;
+		retval = zend_hash_del(svars, "HTTP_RAW_POST_DATA", sizeof("HTTP_RAW_POST_DATA"));
+		if (retval == SUCCESS) failure = 1;
 	} else {
 		retval = zend_hash_exists(svars, "HTTP_GET_VARS", sizeof("HTTP_GET_VARS"));
 		retval+= zend_hash_exists(svars, "HTTP_POST_VARS", sizeof("HTTP_POST_VARS"));
@@ -221,19 +247,19 @@ void suhosin_register_server_variables(zval *track_vars_array TSRMLS_DC)
 		retval+= zend_hash_exists(svars, "HTTP_RAW_POST_DATA", sizeof("HTTP_RAW_POST_DATA"));
 		if (retval > 0) failure = 1;
 	}
-        
-        if (failure) {
-                suhosin_log(S_VARS, "Attacker tried to overwrite a superglobal through a HTTP header");
-        }
+
+	if (failure) {
+		suhosin_log(S_VARS, "Attacker tried to overwrite a superglobal through a HTTP header");
+	}
 	
 	if (SUHOSIN_G(raw_cookie)) {
-        zval *z;
-        MAKE_STD_ZVAL(z);
+		zval *z;
+		MAKE_STD_ZVAL(z);
 		ZVAL_STRING(z, SUHOSIN_G(raw_cookie), 1);
 		zend_hash_add(svars, "RAW_HTTP_COOKIE", sizeof("RAW_HTTP_COOKIE"), (void **)&z, sizeof(zval *), NULL);
-    }
-    if (SUHOSIN_G(decrypted_cookie)) {
-        zval *z;
+	}
+	if (SUHOSIN_G(decrypted_cookie)) {
+		zval *z;
 		MAKE_STD_ZVAL(z);
 		ZVAL_STRING(z, SUHOSIN_G(decrypted_cookie), 0);
 		zend_hash_update(svars, "HTTP_COOKIE", sizeof("HTTP_COOKIE"), (void **)&z, sizeof(zval *), NULL);
@@ -366,7 +392,7 @@ unsigned int suhosin_input_filter(int arg, char *var, char **val, unsigned int v
 	}
 	
 	/* Drop this variable if it begins with whitespace which is disallowed */
-	if (*var == ' ') {
+	if (isspace(*var)) {
 		if (SUHOSIN_G(disallow_ws)) {
 			suhosin_log(S_VARS, "request variable name begins with disallowed whitespace - dropped variable '%s'", var);
 			if (!SUHOSIN_G(simulation)) {
@@ -518,7 +544,8 @@ unsigned int suhosin_input_filter(int arg, char *var, char **val, unsigned int v
 		}
 		
 		index_length = index_end - index;
-			
+		
+		/* max. array index length */
 		if (SUHOSIN_G(max_array_index_length) && SUHOSIN_G(max_array_index_length) < index_length) {
 			suhosin_log(S_VARS, "configured request variable array index length limit exceeded - dropped variable '%s'", var);
 			if (!SUHOSIN_G(simulation)) {
@@ -550,6 +577,23 @@ unsigned int suhosin_input_filter(int arg, char *var, char **val, unsigned int v
 					}
 				} 
 				break;
+		}
+		
+		/* index whitelist/blacklist */
+		if (SUHOSIN_G(array_index_whitelist) && *(SUHOSIN_G(array_index_whitelist))) {
+			if (suhosin_strnspn(index, index_length, SUHOSIN_G(array_index_whitelist)) != index_length) {
+				suhosin_log(S_VARS, "array index contains not whitelisted characters - dropped variable '%s'", var);
+				if (!SUHOSIN_G(simulation)) {
+					return 0;
+				}
+			}
+		} else if (SUHOSIN_G(array_index_blacklist) && *(SUHOSIN_G(array_index_blacklist))) {
+			if (suhosin_strncspn(index, index_length, SUHOSIN_G(array_index_blacklist)) != index_length) {
+				suhosin_log(S_VARS, "array index contains blacklisted characters - dropped variable '%s'", var);
+				if (!SUHOSIN_G(simulation)) {
+					return 0;
+				}
+			}
 		}
 		
 		index = strchr(index, '[');
@@ -591,7 +635,7 @@ unsigned int suhosin_input_filter(int arg, char *var, char **val, unsigned int v
 
 	/* Check if variable value is truncated by a \0 */
 	
-	if (val && *val && val_len != strlen(*val)) {
+	if (val && *val && val_len != strnlen(*val, val_len)) {
 	
 		if (SUHOSIN_G(disallow_nul)) {
 			suhosin_log(S_VARS, "ASCII-NUL chars not allowed within request variables - dropped variable '%s'", var);
@@ -629,47 +673,11 @@ unsigned int suhosin_input_filter(int arg, char *var, char **val, unsigned int v
 	
 	/* Drop this variable if it is one of GLOBALS, _GET, _POST, ... */
 	/* This is to protect several silly scripts that do globalizing themself */
-	
-	switch (var_len) {
-	    case 18:
-		if (memcmp(var, "HTTP_RAW_POST_DATA", 18)==0) goto protected_varname;
-		break;
-	    case 17:
-		if (memcmp(var, "HTTP_SESSION_VARS", 17)==0) goto protected_varname;
-		break;
-	    case 16:
-		if (memcmp(var, "HTTP_SERVER_VARS", 16)==0) goto protected_varname;
-		if (memcmp(var, "HTTP_COOKIE_VARS", 16)==0) goto protected_varname;
-		break;
-	    case 15:
-		if (memcmp(var, "HTTP_POST_FILES", 15)==0) goto protected_varname;
-		break;
-	    case 14:
-		if (memcmp(var, "HTTP_POST_VARS", 14)==0) goto protected_varname;
-		break;
-	    case 13:
-		if (memcmp(var, "HTTP_GET_VARS", 13)==0) goto protected_varname;
-		if (memcmp(var, "HTTP_ENV_VARS", 13)==0) goto protected_varname;
-		break;
-	    case 8:
-		if (memcmp(var, "_SESSION", 8)==0) goto protected_varname;
-		if (memcmp(var, "_REQUEST", 8)==0) goto protected_varname;
-		break;
-	    case 7:
-		if (memcmp(var, "GLOBALS", 7)==0) goto protected_varname;
-		if (memcmp(var, "_COOKIE", 7)==0) goto protected_varname;
-		if (memcmp(var, "_SERVER", 7)==0) goto protected_varname;
-		break;
-	    case 6:
-		if (memcmp(var, "_FILES", 6)==0) goto protected_varname;
-		break;
-	    case 5:
-		if (memcmp(var, "_POST", 5)==0) goto protected_varname;
-		break;
-	    case 4:
-		if (memcmp(var, "_ENV", 4)==0) goto protected_varname;
-		if (memcmp(var, "_GET", 4)==0) goto protected_varname;
-		break;
+	if (suhosin_is_protected_varname(var, var_len)) {
+		suhosin_log(S_VARS, "tried to register forbidden variable '%s' through %s variables", var, arg == PARSE_GET ? "GET" : arg == PARSE_POST ? "POST" : "COOKIE");
+		if (!SUHOSIN_G(simulation)) {
+			return 0;
+		}
 	}
 
 	/* Okay let PHP register this variable */
@@ -691,13 +699,6 @@ unsigned int suhosin_input_filter(int arg, char *var, char **val, unsigned int v
 	}
 
 	return 1;
-protected_varname:
-	suhosin_log(S_VARS, "tried to register forbidden variable '%s' through %s variables", var, arg == PARSE_GET ? "GET" : arg == PARSE_POST ? "POST" : "COOKIE");
-	if (!SUHOSIN_G(simulation)) {
-		return 0;
-	} else {
-		return 1;
-	}
 }
 /* }}} */
 

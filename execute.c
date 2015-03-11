@@ -39,9 +39,13 @@
 #include "sha256.h"
 
 #ifdef PHP_WIN32
+# include "win32/fnmatch.h"
 # include "win32/winutil.h"
 # include "win32/time.h"
 #else
+# ifdef HAVE_FNMATCH
+#  include <fnmatch.h>
+# endif
 # include <sys/time.h>
 #endif
 
@@ -149,7 +153,7 @@ static int suhosin_check_filename(char *s, int len TSRMLS_DC)
 		return SUHOSIN_CODE_TYPE_MANYDOTS;
 	}
 	
-SDEBUG("xxx %08x %08x",SUHOSIN_G(include_whitelist),SUHOSIN_G(include_blacklist));
+SDEBUG("xxx %p %p",SUHOSIN_G(include_whitelist),SUHOSIN_G(include_blacklist));
 	/* no black or whitelist then disallow all */
 	if (SUHOSIN_G(include_whitelist)==NULL && SUHOSIN_G(include_blacklist)==NULL) {
 		/* disallow all URLs */
@@ -295,12 +299,12 @@ static zend_bool suhosin_zend_open(const char *filename, zend_file_handle *fh)
 			break;		    	
 
 		    case SUHOSIN_CODE_TYPE_BLACKURL:
-			suhosin_log(S_INCLUDE, "Include filename ('%s') is an URL that is forbidden by the blacklist", filename);
+			suhosin_log(S_INCLUDE, "Include filename ('%s') is a URL that is forbidden by the blacklist", filename);
 			suhosin_bailout(TSRMLS_C);
 			break;
 			
 		    case SUHOSIN_CODE_TYPE_BADURL:
-			suhosin_log(S_INCLUDE, "Include filename ('%s') is an URL that is not allowed", filename);
+			suhosin_log(S_INCLUDE, "Include filename ('%s') is a URL that is not allowed", filename);
 			suhosin_bailout(TSRMLS_C);
 			break;
 
@@ -414,7 +418,6 @@ static void suhosin_execute_ex(zend_op_array *op_array, int zo, long dummy TSRML
 			SUHOSIN_G(att_get_vars)-SUHOSIN_G(cur_get_vars),
 			SUHOSIN_G(att_post_vars)-SUHOSIN_G(cur_post_vars),
 			SUHOSIN_G(att_cookie_vars)-SUHOSIN_G(cur_cookie_vars));
-		
 		}
 	
 		if (!SUHOSIN_G(simulation) && SUHOSIN_G(filter_action)) {
@@ -518,7 +521,7 @@ static void suhosin_execute_ex(zend_op_array *op_array, int zo, long dummy TSRML
 	} else {
 		if (suhosin_zend_extension_entry.resource_number != -1) {
 			suhosin_flags = (unsigned long *) &op_array->reserved[suhosin_zend_extension_entry.resource_number];
-			SDEBUG("suhosin flags: %08x", *suhosin_flags);
+			SDEBUG("suhosin flags: %08lx", *suhosin_flags);
 			
 			if (*suhosin_flags & SUHOSIN_FLAG_CREATED_BY_EVAL) {
 				SUHOSIN_G(in_code_type) = SUHOSIN_EVAL;
@@ -604,12 +607,12 @@ not_evaled_code:
     			break;		    	
 
 	    case SUHOSIN_CODE_TYPE_BLACKURL:
-			suhosin_log(S_INCLUDE|S_GETCALLER, "Include filename ('%s') is an URL that is forbidden by the blacklist", op_array->filename);
+			suhosin_log(S_INCLUDE|S_GETCALLER, "Include filename ('%s') is a URL that is forbidden by the blacklist", op_array->filename);
 			suhosin_bailout(TSRMLS_C);
 			break;
 			
 	    case SUHOSIN_CODE_TYPE_BADURL:
-			suhosin_log(S_INCLUDE|S_GETCALLER, "Include filename ('%s') is an URL that is not allowed", op_array->filename);
+			suhosin_log(S_INCLUDE|S_GETCALLER, "Include filename ('%s') is a URL that is not allowed", op_array->filename);
 		    suhosin_bailout(TSRMLS_C);
 			break;
 
@@ -631,7 +634,6 @@ not_evaled_code:
 	    case SUHOSIN_CODE_TYPE_UNKNOWN:
 	    case SUHOSIN_CODE_TYPE_GOODFILE:
 			goto continue_execution;
-		    break;
 	}
 
 continue_execution:
@@ -880,7 +882,7 @@ int ih_querycheck(IH_HANDLER_PARAMS)
 		return (0);
 	}
     
-	if ((long) ih->arg1) {
+	if ((long) ih->arg2) {
     	    mysql_extension = 1;
 	}
 	
@@ -892,6 +894,7 @@ int ih_querycheck(IH_HANDLER_PARAMS)
 	}
 	len = Z_STRLEN_P(backup);
 	query = Z_STRVAL_P(backup);
+	SDEBUG("SQL |%s|", query);
 	
 	s = query;
 	e = s+len;
@@ -1023,29 +1026,16 @@ int ih_fixusername(IH_HANDLER_PARAMS)
 	void **p = EG(argument_stack).top_element-2;
 #endif
 	unsigned long arg_count;
-	zval **arg;char *prefix, *postfix, *user;
+	zval **arg;
+	char *prefix, *postfix, *user, *user_match, *cp;
 	zval *backup, *my_user;
 	int prefix_len, postfix_len, len;
 	
-	SDEBUG("function: %s", ih->name);
+	SDEBUG("function (fixusername): %s", ih->name);
 	
 	prefix = SUHOSIN_G(sql_user_prefix);
 	postfix = SUHOSIN_G(sql_user_postfix);
-	
-	if ((prefix == NULL || prefix[0] == 0)&& 
-		(postfix == NULL || postfix[0] == 0)) {
-		return (0);
-	}
-	
-	if (prefix == NULL) {
-		prefix = "";
-	}
-	if (postfix == NULL) {
-		postfix = "";
-	}
-	
-	prefix_len = strlen(prefix);
-	postfix_len = strlen(postfix);
+	user_match = SUHOSIN_G(sql_user_match);
 	
 	arg_count = (unsigned long) *p;
 
@@ -1064,26 +1054,59 @@ int ih_fixusername(IH_HANDLER_PARAMS)
 		user = Z_STRVAL_P(backup);
 	}
 
-	if (prefix_len && prefix_len <= len) {
-		if (strncmp(prefix, user, prefix_len)==0) {
-			prefix = "";
-			len -= prefix_len;
+	cp = user;
+	while (cp < user+len) {
+		if (*cp < 32) {
+			suhosin_log(S_SQL, "SQL username contains invalid characters");
+			if (!SUHOSIN_G(simulation)) {
+				RETVAL_FALSE;
+				return (1);
+			}
+			break;
 		}
+		cp++;
 	}
-	
-	if (postfix_len && postfix_len <= len) {
-		if (strncmp(postfix, user+len-postfix_len, postfix_len)==0) {
+
+	if ((prefix != NULL && prefix[0]) || (postfix != NULL && postfix[0])) {
+		if (prefix == NULL) {
+			prefix = "";
+		}
+		if (postfix == NULL) {
 			postfix = "";
 		}
+		prefix_len = strlen(prefix);
+		postfix_len = strlen(postfix);
+		
+		MAKE_STD_ZVAL(my_user);
+		my_user->type = IS_STRING;
+		my_user->value.str.len = spprintf(&my_user->value.str.val, 0, "%s%s%s", prefix, user, postfix);
+	
+		/* XXX: memory_leak? */
+		*arg = my_user;	
+		
+		len = Z_STRLEN_P(my_user);
+		user = Z_STRVAL_P(my_user);
 	}
 	
-	MAKE_STD_ZVAL(my_user);
-	my_user->type = IS_STRING;
-	my_user->value.str.len = spprintf(&my_user->value.str.val, 0, "%s%s%s", prefix, user, postfix);
+	if (user_match && user_match[0]) {
+#ifdef HAVE_FNMATCH
+		if (fnmatch(user_match, user, 0) != 0) {
+			suhosin_log(S_SQL, "SQL username ('%s') does not match suhosin.sql.user_match ('%s')", user, user_match);
+			if (!SUHOSIN_G(simulation)) {
+				RETVAL_FALSE;
+				return (1);
+			}
+		}
+#else
+#warning no support for fnmatch() - setting suhosin.sql.user_match will always fail.
+		suhosin_log(S_SQL, "suhosin.sql.user_match specified, but system does not support fnmatch()");
+		if (!SUHOSIN_G(simulation)) {
+			RETVAL_FALSE;
+			return (1);
+		}
+#endif
+	}
 	
-	/* XXX: memory_leak? */
-	*arg = my_user;	
-	 
 	SDEBUG("function: %s - user: %s", ih->name, user);
 
 	return (0);
@@ -1366,7 +1389,7 @@ static void suhosin_gen_entropy(php_uint32 *entropybuf TSRMLS_DC)
     }
 #else
     /* we have to live with the possibility that this call fails */
-    php_win32_get_random_bytes(rbuf, 8 * sizeof(php_uint32));
+    php_win32_get_random_bytes((unsigned char*)&seedbuf[6], 8 * sizeof(php_uint32));
 #endif
 
     suhosin_SHA256Init(&context);
@@ -1552,9 +1575,9 @@ static int ih_getrandmax(IH_HANDLER_PARAMS)
 }
 
 internal_function_handler ihandlers[] = {
-    { "preg_replace", ih_preg_replace, NULL, NULL, NULL },
-    { "mail", ih_mail, NULL, NULL, NULL },
-    { "symlink", ih_symlink, NULL, NULL, NULL },
+	{ "preg_replace", ih_preg_replace, NULL, NULL, NULL },
+	{ "mail", ih_mail, NULL, NULL, NULL },
+	{ "symlink", ih_symlink, NULL, NULL, NULL },
 	
 	{ "srand", ih_srand, NULL, NULL, NULL },
 	{ "mt_srand", ih_mt_srand, NULL, NULL, NULL },
@@ -1563,55 +1586,101 @@ internal_function_handler ihandlers[] = {
 	{ "getrandmax", ih_getrandmax, NULL, NULL, NULL },
 	{ "mt_getrandmax", ih_getrandmax, NULL, NULL, NULL },
 	
-    { "ocilogon", ih_fixusername, (void *)1, NULL, NULL },
-    { "ociplogon", ih_fixusername, (void *)1, NULL, NULL },
-    { "ocinlogon", ih_fixusername, (void *)1, NULL, NULL },
-    { "oci_connect", ih_fixusername, (void *)1, NULL, NULL },
-    { "oci_pconnect", ih_fixusername, (void *)1, NULL, NULL },
-    { "oci_new_connect", ih_fixusername, (void *)1, NULL, NULL },
+	{ "function_exists", ih_function_exists, NULL, NULL, NULL },
 	
-    { "fbsql_change_user", ih_fixusername, (void *)1, NULL, NULL },
-    { "fbsql_connect", ih_fixusername, (void *)2, NULL, NULL },
-    { "fbsql_pconnect", ih_fixusername, (void *)2, NULL, NULL },
-    
-    { "function_exists", ih_function_exists, NULL, NULL, NULL },
+	/* Mysqli */
+	{ "mysqli::mysqli", ih_fixusername, (void *)2, NULL, NULL },
+	{ "mysqli_connect", ih_fixusername, (void *)2, NULL, NULL },
+	{ "mysqli::real_connect", ih_fixusername, (void *)2, NULL, NULL },
+	{ "mysqli_real_connect", ih_fixusername, (void *)3, NULL, NULL },
+	{ "mysqli_change_user", ih_fixusername, (void *)2, NULL, NULL },
+	{ "mysqli::change_user", ih_fixusername, (void *)1, NULL, NULL },
 	
-    { "ifx_connect", ih_fixusername, (void *)2, NULL, NULL },
-    { "ifx_pconnect", ih_fixusername, (void *)2, NULL, NULL },
+	{ "mysqli::query", ih_querycheck, (void *)1, (void *)1, NULL },
+	{ "mysqli_query", ih_querycheck, (void *)2, (void *)1, NULL },
+	{ "mysqli::multi_query", ih_querycheck, (void *)1, (void *)1, NULL },
+	{ "mysqli_multi_query", ih_querycheck, (void *)2, (void *)1, NULL },
+	{ "mysqli::prepare", ih_querycheck, (void *)1, (void *)1, NULL },
+	{ "mysqli_prepare", ih_querycheck, (void *)2, (void *)1, NULL },
+	{ "mysqli::real_query", ih_querycheck, (void *)1, (void *)1, NULL },
+	{ "mysqli_real_query", ih_querycheck, (void *)2, (void *)1, NULL },
+	{ "mysqli::send_query", ih_querycheck, (void *)1, (void *)1, NULL },
+	{ "mysqli_send_query", ih_querycheck, (void *)2, (void *)1, NULL },
+	// removed in PHP 5.3
+	{ "mysqli_master_query", ih_querycheck, (void *)2, (void *)1, NULL },
+	{ "mysqli_slave_query", ih_querycheck, (void *)2, (void *)1, NULL },
+	// ----
+	
+	/* Mysql API - deprecated in PHP 5.5 */
+	{ "mysql_connect", ih_fixusername, (void *)2, NULL, NULL },
+	{ "mysql_pconnect", ih_fixusername, (void *)2, NULL, NULL },
+	{ "mysql_query", ih_querycheck, (void *)1, (void *)1, NULL },
+	{ "mysql_db_query", ih_querycheck, (void *)2, (void *)1, NULL },
+	{ "mysql_unbuffered_query", ih_querycheck, (void *)1, (void *)1, NULL },
+	
+#ifdef SUHOSIN_EXPERIMENTAL
+	/* MaxDB */
+	{ "maxdb::maxdb", ih_fixusername, (void *)2, NULL, NULL },
+	{ "maxdb_connect", ih_fixusername, (void *)2, NULL, NULL },
+	{ "maxdb::real_connect", ih_fixusername, (void *)2, NULL, NULL },
+	{ "maxdb_real_connect", ih_fixusername, (void *)3, NULL, NULL },
+	{ "maxdb::change_user", ih_fixusername, (void *)1, NULL, NULL },
+	{ "maxdb_change_user", ih_fixusername, (void *)2, NULL, NULL },
+	
+	{ "maxdb_master_query", ih_querycheck, (void *)2, NULL, NULL },
+	{ "maxdb::multi_query", ih_querycheck, (void *)1, NULL, NULL },
+	{ "maxdb_multi_query", ih_querycheck, (void *)2, NULL, NULL },
+	{ "maxdb::query", ih_querycheck, (void *)1, NULL, NULL },
+	{ "maxdb_query", ih_querycheck, (void *)2, NULL, NULL },
+	{ "maxdb::real_query", ih_querycheck, (void *)1, NULL, NULL },
+	{ "maxdb_real_query", ih_querycheck, (void *)2, NULL, NULL },
+	{ "maxdb::send_query", ih_querycheck, (void *)1, NULL, NULL },
+	{ "maxdb_send_query", ih_querycheck, (void *)2, NULL, NULL },
+	{ "maxdb::prepare", ih_querycheck, (void *)1, NULL, NULL },
+	{ "maxdb_prepare", ih_querycheck, (void *)2, NULL, NULL },
 
-    { "ibase_connect", ih_fixusername, (void *)2, NULL, NULL },
-    { "ibase_pconnect", ih_fixusername, (void *)2, NULL, NULL },
+	/* PDO */
+		/* note: mysql conditional comments not supported here */
+	{ "pdo::__construct", ih_fixusername, (void *)2, NULL, NULL }, /* note: username may come from dsn (param 1) */
+	{ "pdo::query", ih_querycheck, (void *)1, NULL, NULL },
+	{ "pdo::prepare", ih_querycheck, (void *)1, NULL, NULL },
+	{ "pdo::exec", ih_querycheck, (void *)1, NULL, NULL },
+	
+	/* Oracle OCI8 */
+	{ "ocilogon", ih_fixusername, (void *)1, NULL, NULL },
+	{ "ociplogon", ih_fixusername, (void *)1, NULL, NULL },
+	{ "ocinlogon", ih_fixusername, (void *)1, NULL, NULL },
+	{ "oci_connect", ih_fixusername, (void *)1, NULL, NULL },
+	{ "oci_pconnect", ih_fixusername, (void *)1, NULL, NULL },
+	{ "oci_new_connect", ih_fixusername, (void *)1, NULL, NULL },
 
-    { "maxdb", ih_fixusername, (void *)2, NULL, NULL },
-    { "maxdb_change_user", ih_fixusername, (void *)2, NULL, NULL },
-    { "maxdb_connect", ih_fixusername, (void *)2, NULL, NULL },
-    { "maxdb_pconnect", ih_fixusername, (void *)2, NULL, NULL },
-    { "maxdb_real_connect", ih_fixusername, (void *)3, NULL, NULL },
+	/* FrontBase */
+	{ "fbsql_connect", ih_fixusername, (void *)2, NULL, NULL },
+	{ "fbsql_pconnect", ih_fixusername, (void *)2, NULL, NULL },
+	{ "fbsql_change_user", ih_fixusername, (void *)1, NULL, NULL },
+	{ "fbsql_username", ih_fixusername, (void *)2, NULL, NULL },
 
-    { "mssql_connect", ih_fixusername, (void *)2, NULL, NULL },
-    { "mssql_pconnect", ih_fixusername, (void *)2, NULL, NULL },
+	/* Informix */
+	{ "ifx_connect", ih_fixusername, (void *)2, NULL, NULL },
+	{ "ifx_pconnect", ih_fixusername, (void *)2, NULL, NULL },
 
-    { "mysql_query", ih_querycheck, (void *)1, (void *)1, NULL },
-    { "mysql_db_query", ih_querycheck, (void *)2, (void *)1, NULL },
-    { "mysql_unbuffered_query", ih_querycheck, (void *)1, (void *)1, NULL },
-    { "mysqli_query", ih_querycheck, (void *)2, (void *)1, NULL },
-    { "mysqli_real_query", ih_querycheck, (void *)2, (void *)1, NULL },
-    { "mysqli_send_query", ih_querycheck, (void *)2, (void *)1, NULL },
-    { "mysqli_master_query", ih_querycheck, (void *)2, (void *)1, NULL },
-    { "mysqli_slave_query", ih_querycheck, (void *)2, (void *)1, NULL },
+	/* Firebird/InterBase */
+	{ "ibase_connect", ih_fixusername, (void *)2, NULL, NULL },
+	{ "ibase_pconnect", ih_fixusername, (void *)2, NULL, NULL },
+	{ "ibase_service_attach", ih_fixusername, (void *)2, NULL, NULL },
 
-    { "mysqli", ih_fixusername, (void *)2, NULL, NULL },
-    { "mysql_connect", ih_fixusername, (void *)2, NULL, NULL },
-    { "mysql_pconnect", ih_fixusername, (void *)2, NULL, NULL },
-    { "mysqli_change_user", ih_fixusername, (void *)2, NULL, NULL },
-    { "mysql_real_connect", ih_fixusername, (void *)3, NULL, NULL },
-    { NULL, NULL, NULL, NULL, NULL }
+	/* Microsoft SQL Server */
+	{ "mssql_connect", ih_fixusername, (void *)2, NULL, NULL },
+	{ "mssql_pconnect", ih_fixusername, (void *)2, NULL, NULL },
+#endif
+
+	{ NULL, NULL, NULL, NULL, NULL }
 };
 
 #define FUNCTION_WARNING() zend_error(E_WARNING, "%s() has been disabled for security reasons", get_active_function_name(TSRMLS_C));
 #define FUNCTION_SIMULATE_WARNING() zend_error(E_WARNING, "SIMULATION - %s() has been disabled for security reasons", get_active_function_name(TSRMLS_C));
 
-/* {{{ void suhosin_execute_internal(zend_execute_data *execute_data_ptr, int return_value_used TSRMLS_DC)
+/* {{{ void suhosin_execute_internal
  *    This function provides a hook for internal execution */
 #if PHP_VERSION_ID >= 50500
 #define EX_T(offset) (*EX_TMP_VAR(execute_data_ptr, offset))

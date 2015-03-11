@@ -1,3 +1,26 @@
+2014-12-03 - 0.9.37
+
+    - Added SQL injection protection for Mysqli and several test cases
+    - Added wildcard matching for SQL username
+    - Added check for SQL username to only contain valid characters (>= ASCII 32)
+    - Test cases for user_prefix and user_postfix
+    - Added experimental PDO support
+    - SQL checks other than mysql (Mysqli + old-style) must be enabled with
+      configure --enable-suhosin-experimental, e.g. MSSQL.
+    - disallow_ws now matches all single-byte whitespace characters
+    - remove_binary and disallow_binary now optionally allow UTF-8.
+    - Introduced suhosin.upload.allow_utf8 (experimental)
+    - Reimplemented suhosin_get_raw_cookies()
+    - Fixed potential segfault for disable_display_errors=fail (only on ARM)
+    - Fixed potential NULL-pointer dereference with func.blacklist and logging
+    - Logging timestamps are localtime instead of gmt now (thanks to mkrokos)
+    - Added new array index filter (character whitelist/blacklist)
+    - Set default array index blacklist to '"+-<>;()
+    - Added option to suppress date/time for suhosin file logging (suhosin.log.file.time=0)
+    - Added simple script to create binary Debian package
+    - Fixed additional recursion problems with session handler
+    - Suhosin now depends on php_session.h instead of version-specific struct code
+
 2014-06-10 - 0.9.36
 
     - Added better handling of non existing/non executable shell scripts
