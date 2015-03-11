@@ -112,7 +112,7 @@ PHP_SUHOSIN_API void suhosin_log(int loglevel, char *fmt, ...)
 	char *ip_address;
 	char *fname;
 	char *alertstring;
-	int lineno;
+	int lineno = 0;
 	va_list ap;
 	TSRMLS_FETCH();
 
@@ -122,7 +122,7 @@ PHP_SUHOSIN_API void suhosin_log(int loglevel, char *fmt, ...)
 	/* remove the S_GETCALLER flag */
 	loglevel = loglevel & ~S_GETCALLER;
 
-	SDEBUG("(suhosin_log) loglevel: %d log_syslog: %u - log_sapi: %u - log_script: %u", loglevel, SUHOSIN_G(log_syslog), SUHOSIN_G(log_sapi), SUHOSIN_G(log_script));
+	SDEBUG("(suhosin_log) loglevel: %d log_syslog: %ld - log_sapi: %ld - log_script: %ld", loglevel, SUHOSIN_G(log_syslog), SUHOSIN_G(log_sapi), SUHOSIN_G(log_script));
 
 	/* dump core if wanted */
 	if (SUHOSIN_G(coredump) && loglevel == S_MEMORY) {
@@ -160,12 +160,15 @@ PHP_SUHOSIN_API void suhosin_log(int loglevel, char *fmt, ...)
 	if (zend_is_executing(TSRMLS_C)) {
 		zend_execute_data *exdata = EG(current_execute_data);
 		if (exdata) {
-			if (getcaller && exdata->prev_execute_data) {
+			if (getcaller && exdata->prev_execute_data && exdata->prev_execute_data->opline && exdata->prev_execute_data->op_array) {
 				lineno = exdata->prev_execute_data->opline->lineno;
-				fname = (char *)exdata->prev_execute_data->op_array->filename;									
-			} else {
+				fname = (char *)exdata->prev_execute_data->op_array->filename;
+			} else if (exdata->opline && exdata->op_array) {
 				lineno = exdata->opline->lineno;
-				fname = (char *)exdata->op_array->filename;				
+				fname = (char *)exdata->op_array->filename;
+			} else {
+				lineno = 0;
+				fname = "[unknown filename]";
 			}
 		} else {
 			lineno = zend_get_executed_lineno(TSRMLS_C);
@@ -258,10 +261,14 @@ log_file:
 	    return;
 	}
 
-	gettimeofday(&tv, NULL);
-	now = tv.tv_sec;
-	php_gmtime_r(&now, &tm);
-	ap_php_snprintf(error, sizeof(error), "%s %2d %02d:%02d:%02d [%u] %s\n", month_names[tm.tm_mon], tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, getpid(),buf);
+	if (SUHOSIN_G(log_file_time)) {
+		gettimeofday(&tv, NULL);
+		now = tv.tv_sec;
+		php_localtime_r(&now, &tm);
+		ap_php_snprintf(error, sizeof(error), "%s %2d %02d:%02d:%02d [%u] %s\n", month_names[tm.tm_mon], tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, getpid(),buf);
+	} else {
+		ap_php_snprintf(error, sizeof(error), "%s\n", buf);
+	}
 	towrite = strlen(error);
 	wbuf = error;
 	php_flock(fd, LOCK_EX);
@@ -278,7 +285,7 @@ log_file:
 
 log_sapi:
 	/* SAPI Logging activated? */
-	SDEBUG("(suhosin_log) log_syslog: %u - log_sapi: %u - log_script: %u - log_phpscript: %u", SUHOSIN_G(log_syslog), SUHOSIN_G(log_sapi), SUHOSIN_G(log_script), SUHOSIN_G(log_phpscript));
+	SDEBUG("(suhosin_log) log_syslog: %ld - log_sapi: %ld - log_script: %ld - log_phpscript: %ld", SUHOSIN_G(log_syslog), SUHOSIN_G(log_sapi), SUHOSIN_G(log_script), SUHOSIN_G(log_phpscript));
 	if (((SUHOSIN_G(log_sapi)|S_INTERNAL) & loglevel)!=0) {
 #if PHP_VERSION_ID < 50400
 		sapi_module.log_message(buf);
@@ -287,7 +294,7 @@ log_sapi:
 #endif
 	}
 	if ((SUHOSIN_G(log_stdout) & loglevel)!=0) {
-		printf("%s\n", buf);
+		fprintf(stdout, "%s\n", buf);
 	}
 
 /*log_script:*/

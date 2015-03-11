@@ -28,6 +28,7 @@
 #include "zend_extensions.h"
 #include "ext/standard/info.h"
 #include "php_syslog.h"
+#include "php_variables.h"
 #include "php_suhosin.h"
 #include "zend_llist.h"
 #include "zend_operators.h"
@@ -210,7 +211,7 @@ static void suhosin_shutdown(zend_extension *extension)
 
 static int suhosin_startup_wrapper(zend_extension *ext)
 {
-	int res;
+	int res = SUCCESS;
 	zend_extension *ex = &suhosin_zend_extension_entry;
 	char *new_info;
 	int new_info_length;
@@ -243,7 +244,9 @@ static int suhosin_startup_wrapper(zend_extension *ext)
 	    ze->op_array_dtor = stealth_op_array_dtor;
     /*}*/
 	
-	res = old_startup(ext);
+	if (old_startup != NULL) {
+		res = old_startup(ext);
+	}
 
 /*    ex->name = NULL; 
     ex->author = NULL;
@@ -385,6 +388,11 @@ static ZEND_INI_MH(OnUpdateSuhosin_log_syslog)
 	if (!new_value) {
 		SUHOSIN_G(log_syslog) = (S_ALL & ~S_SQL) | S_MEMORY;
 	} else {
+		if (is_numeric_string(new_value, strlen(new_value), NULL, NULL, 0) != IS_LONG) {
+			SUHOSIN_G(log_syslog) = (S_ALL & ~S_SQL) | S_MEMORY;
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "unknown constant in suhosin.log.syslog=%s", new_value);
+			return FAILURE;
+		}
 		SUHOSIN_G(log_syslog) = atoi(new_value) | S_MEMORY;
 	}
 	return SUCCESS;
@@ -415,6 +423,11 @@ static ZEND_INI_MH(OnUpdateSuhosin_log_sapi)
 	if (!new_value) {
 		SUHOSIN_G(log_sapi) = (S_ALL & ~S_SQL);
 	} else {
+		if (is_numeric_string(new_value, strlen(new_value), NULL, NULL, 0) != IS_LONG) {
+			SUHOSIN_G(log_sapi) = (S_ALL & ~S_SQL);
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "unknown constant in suhosin.log.sapi=%s", new_value);
+			return FAILURE;
+		}
 		SUHOSIN_G(log_sapi) = atoi(new_value);
 	}
 	return SUCCESS;
@@ -425,6 +438,11 @@ static ZEND_INI_MH(OnUpdateSuhosin_log_stdout)
 	if (!new_value) {
 		SUHOSIN_G(log_stdout) = (S_ALL & ~S_SQL);
 	} else {
+		if (is_numeric_string(new_value, strlen(new_value), NULL, NULL, 0) != IS_LONG) {
+			SUHOSIN_G(log_stdout) = (S_ALL & ~S_SQL);
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "unknown constant in suhosin.log.stdout=%s", new_value);
+			return FAILURE;
+		}
 		SUHOSIN_G(log_stdout) = atoi(new_value);
 	}
 	return SUCCESS;
@@ -435,6 +453,11 @@ static ZEND_INI_MH(OnUpdateSuhosin_log_script)
 	if (!new_value) {
 		SUHOSIN_G(log_script) = S_ALL & ~S_MEMORY;
 	} else {
+		if (is_numeric_string(new_value, strlen(new_value), NULL, NULL, 0) != IS_LONG) {
+			SUHOSIN_G(log_script) = S_ALL & ~S_MEMORY;
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "unknown constant in suhosin.log.script=%s", new_value);
+			return FAILURE;
+		}
 		SUHOSIN_G(log_script) = atoi(new_value) & (~S_MEMORY) & (~S_INTERNAL);
 	}
 	return SUCCESS;
@@ -457,6 +480,11 @@ static ZEND_INI_MH(OnUpdateSuhosin_log_phpscript)
 	if (!new_value) {
 		SUHOSIN_G(log_phpscript) = S_ALL & ~S_MEMORY;
 	} else {
+		if (is_numeric_string(new_value, strlen(new_value), NULL, NULL, 0) != IS_LONG) {
+			SUHOSIN_G(log_phpscript) = S_ALL & ~S_MEMORY;
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "unknown constant in suhosin.log.phpscript=%s", new_value);
+			return FAILURE;
+		}
 		SUHOSIN_G(log_phpscript) = atoi(new_value) & (~S_MEMORY) & (~S_INTERNAL);
 	}
 	return SUCCESS;
@@ -467,6 +495,11 @@ static ZEND_INI_MH(OnUpdateSuhosin_log_file)
 	if (!new_value) {
 		SUHOSIN_G(log_file) = S_ALL & ~S_MEMORY;
 	} else {
+		if (is_numeric_string(new_value, strlen(new_value), NULL, NULL, 0) != IS_LONG) {
+			SUHOSIN_G(log_file) = S_ALL & ~S_MEMORY;
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "unknown constant in suhosin.log.file=%s", new_value);
+			return FAILURE;
+		}
 		SUHOSIN_G(log_file) = atoi(new_value) & (~S_MEMORY) & (~S_INTERNAL);
 	}
 	return SUCCESS;
@@ -618,175 +651,6 @@ static ZEND_INI_MH(OnUpdate_fail)
 	return FAILURE;
 }
 
-/* {{{ proto void suhosin_register_cookie_variable(char *var, zval *val, zval *track_vars_array TSRMLS_DC)
-   Registers a cookie in the RAW cookie array */
-static void suhosin_register_cookie_variable(char *var, zval *val, zval *track_vars_array TSRMLS_DC)
-{
-	char *p = NULL;
-	char *ip;		/* index pointer */
-	char *index, *escaped_index = NULL;
-	int var_len, index_len;
-	zval *gpc_element, **gpc_element_p;
-	zend_bool is_array = 0;
-	HashTable *symtable1 = NULL;
-
-	assert(var != NULL);
-	
-	symtable1 = Z_ARRVAL_P(track_vars_array);
-
-	/*
-	 * Prepare variable name
-	 */
-
-	/* ignore leading spaces in the variable name */
-	while (*var && *var==' ') {
-		var++;
-	}
-
-	/* ensure that we don't have spaces or dots in the variable name (not binary safe) */
-	for (p = var; *p; p++) {
-		if (*p == ' ' || *p == '.') {
-			*p='_';
-		} else if (*p == '[') {
-			is_array = 1;
-			ip = p;
-			*p = 0;
-			break;
-		}
-	}
-	var_len = p - var;
-
-	if (var_len==0) { /* empty variable name, or variable name with a space in it */
-		zval_dtor(val);
-		return;
-	}
-
-	index = var;
-	index_len = var_len;
-
-	if (is_array) {
-		while (1) {
-			char *index_s;
-			int new_idx_len = 0;
-
-			ip++;
-			index_s = ip;
-			if (isspace(*ip)) {
-				ip++;
-			}
-			if (*ip==']') {
-				index_s = NULL;
-			} else {
-				ip = strchr(ip, ']');
-				if (!ip) {
-					/* PHP variables cannot contain '[' in their names, so we replace the character with a '_' */
-					*(index_s - 1) = '_';
-
-					index_len = var_len = 0;
-					if (index) {
-						index_len = var_len = strlen(index);
-					}
-					goto plain_var;
-					return;
-				}
-				*ip = 0;
-				new_idx_len = strlen(index_s);	
-			}
-
-			if (!index) {
-				MAKE_STD_ZVAL(gpc_element);
-				array_init(gpc_element);
-				zend_hash_next_index_insert(symtable1, &gpc_element, sizeof(zval *), (void **) &gpc_element_p);
-			} else {
-#if PHP_VERSION_ID < 50400
-				if (PG(magic_quotes_gpc) && (index != var)) {
-					/* no need to addslashes() the index if it's the main variable name */
-					escaped_index = php_addslashes(index, index_len, &index_len, 0 TSRMLS_CC);
-				} else {
-#endif
-					escaped_index = index;
-#if PHP_VERSION_ID < 50400
-				}
-#endif
-				if (zend_symtable_find(symtable1, escaped_index, index_len + 1, (void **) &gpc_element_p) == FAILURE
-					|| Z_TYPE_PP(gpc_element_p) != IS_ARRAY) {
-					MAKE_STD_ZVAL(gpc_element);
-					array_init(gpc_element);
-					zend_symtable_update(symtable1, escaped_index, index_len + 1, &gpc_element, sizeof(zval *), (void **) &gpc_element_p);
-				}
-				if (index != escaped_index) {
-					efree(escaped_index);
-				}
-			}
-			symtable1 = Z_ARRVAL_PP(gpc_element_p);
-			/* ip pointed to the '[' character, now obtain the key */
-			index = index_s;
-			index_len = new_idx_len;
-
-			ip++;
-			if (*ip == '[') {
-				is_array = 1;
-				*ip = 0;
-			} else {
-				goto plain_var;
-			}
-		}
-	} else {
-plain_var:
-		MAKE_STD_ZVAL(gpc_element);
-		gpc_element->value = val->value;
-		Z_TYPE_P(gpc_element) = Z_TYPE_P(val);
-		if (!index) {
-			zend_hash_next_index_insert(symtable1, &gpc_element, sizeof(zval *), (void **) &gpc_element_p);
-		} else {
-#if PHP_VERSION_ID < 50400
-			if (PG(magic_quotes_gpc)) { 
-				escaped_index = php_addslashes(index, index_len, &index_len, 0 TSRMLS_CC);
-			} else {
-#endif
-				escaped_index = index;
-#if PHP_VERSION_ID < 50400
-			}
-#endif
-			/* 
-			 * According to rfc2965, more specific paths are listed above the less specific ones.
-			 * If we encounter a duplicate cookie name, we should skip it, since it is not possible
-			 * to have the same (plain text) cookie name for the same path and we should not overwrite
-			 * more specific cookies with the less specific ones.
-			 */
-            if (zend_symtable_exists(symtable1, escaped_index, index_len + 1)) {
-				zval_ptr_dtor(&gpc_element);
-			} else {
-				zend_symtable_update(symtable1, escaped_index, index_len + 1, &gpc_element, sizeof(zval *), (void **) &gpc_element_p);
-			}
-			if (escaped_index != index) {
-				efree(escaped_index);
-			}
-		}
-	}
-}
-/* }}} */
-
-static void suhosin_register_cookie_variable_safe(char *var, char *strval, int str_len, zval *track_vars_array TSRMLS_DC)
-{
-	zval new_entry;
-	assert(strval != NULL);
-	
-	/* Prepare value */
-	Z_STRLEN(new_entry) = str_len;
-#if PHP_VERSION_ID < 50400
-	if (PG(magic_quotes_gpc)) {
-		Z_STRVAL(new_entry) = php_addslashes(strval, Z_STRLEN(new_entry), &Z_STRLEN(new_entry), 0 TSRMLS_CC);
-	} else {
-#endif
-		Z_STRVAL(new_entry) = estrndup(strval, Z_STRLEN(new_entry));
-#if PHP_VERSION_ID < 50400
-	}
-#endif
-	Z_TYPE(new_entry) = IS_STRING;
-
-	suhosin_register_cookie_variable(var, &new_entry, track_vars_array TSRMLS_CC);
-}
 
 
 /* {{{ proto string suhosin_encrypt_cookie(string name, string value)
@@ -828,37 +692,43 @@ return_plain:
 static PHP_FUNCTION(suhosin_get_raw_cookies)
 {
 	char *var, *val, *res;
-    zval *array_ptr = return_value;
-    char *strtok_buf = NULL;
-    int val_len;
-    
-	array_init(array_ptr);
-
-    if (SUHOSIN_G(raw_cookie)) {
-        res = estrdup(SUHOSIN_G(raw_cookie));
-    } else {
-        return;
-    }
-
-	var = php_strtok_r(res, ";", &strtok_buf);
+	zval *array_ptr = return_value;
+	char *strtok_buf = NULL;
+	int val_len;
 	
-	while (var) {
+	array_init(array_ptr);
+	
+	if (SUHOSIN_G(raw_cookie)) {
+		res = estrdup(SUHOSIN_G(raw_cookie));
+	} else {
+		return;
+	}
+
+	var = NULL;
+	while (var != res) {
+		var = strrchr(res, ';');
+		if (var) {
+			*var++ = '\0';
+		} else {
+			var = res;
+		}
+		if (!*var) { continue; }
+		
 		val = strchr(var, '=');
 		if (val) { /* have a value */
 			*val++ = '\0';
 			php_url_decode(var, strlen(var));
 			val_len = php_url_decode(val, strlen(val));
-			suhosin_register_cookie_variable_safe(var, val, val_len, array_ptr TSRMLS_CC);
 		} else {
 			php_url_decode(var, strlen(var));
 			val_len = 0;
 			val = "";
-			suhosin_register_cookie_variable_safe(var, "", 0, array_ptr TSRMLS_CC);
 		}
-		var = php_strtok_r(NULL, ";", &strtok_buf);
+		php_register_variable_safe(var, val, val_len, array_ptr TSRMLS_CC);
+		
 	}
-	
-    efree(res);
+
+	efree(res);
 }
 /* }}} */
 
@@ -912,6 +782,7 @@ static zend_ini_entry shared_ini_entries[] = {
 	STD_ZEND_INI_ENTRY("suhosin.log.phpscript.name",			NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateLogString, log_phpscriptname, zend_suhosin_globals, suhosin_globals)
 	ZEND_INI_ENTRY("suhosin.log.file",			"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateSuhosin_log_file)
 	STD_ZEND_INI_ENTRY("suhosin.log.file.name",		NULL,		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateLogString, log_filename, zend_suhosin_globals, suhosin_globals)
+	STD_ZEND_INI_BOOLEAN("suhosin.log.file.time",			"1",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateLogBool, log_file_time,	zend_suhosin_globals,	suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.log.phpscript.is_safe",			"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateLogBool, log_phpscript_is_safe,	zend_suhosin_globals,	suhosin_globals)
 ZEND_INI_END()
  
@@ -929,7 +800,7 @@ PHP_INI_BEGIN()
 	STD_ZEND_INI_BOOLEAN("suhosin.executor.disable_emodifier",	"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateExecBool, executor_disable_emod,	zend_suhosin_globals,	suhosin_globals)
 
 	STD_ZEND_INI_BOOLEAN("suhosin.executor.allow_symlink",	"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateExecBool, executor_allow_symlink,	zend_suhosin_globals,	suhosin_globals)
-	STD_ZEND_INI_ENTRY("suhosin.executor.max_depth",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateExecLong, max_execution_depth,	zend_suhosin_globals,	suhosin_globals)
+	STD_ZEND_INI_ENTRY("suhosin.executor.max_depth",		"750",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateExecLong, max_execution_depth,	zend_suhosin_globals,	suhosin_globals)
 
 	
 	STD_ZEND_INI_BOOLEAN("suhosin.multiheader",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateMiscBool, allow_multiheader,	zend_suhosin_globals,	suhosin_globals)
@@ -952,6 +823,8 @@ PHP_INI_BEGIN()
         STD_PHP_INI_ENTRY("suhosin.request.max_array_depth", "50", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateRequestLong, max_array_depth, zend_suhosin_globals, suhosin_globals)
         STD_PHP_INI_ENTRY("suhosin.request.max_totalname_length", "256", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateRequestLong, max_totalname_length, zend_suhosin_globals, suhosin_globals)
         STD_PHP_INI_ENTRY("suhosin.request.max_array_index_length", "64", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateRequestLong, max_array_index_length, zend_suhosin_globals, suhosin_globals)
+		STD_PHP_INI_ENTRY("suhosin.request.array_index_whitelist", "", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateString, array_index_whitelist, zend_suhosin_globals, suhosin_globals)
+		STD_PHP_INI_ENTRY("suhosin.request.array_index_blacklist", "'\"+-<>;()", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateString, array_index_blacklist, zend_suhosin_globals, suhosin_globals)
         STD_PHP_INI_ENTRY("suhosin.request.disallow_nul", "1", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateRequestBool, disallow_nul, zend_suhosin_globals, suhosin_globals)
         STD_PHP_INI_ENTRY("suhosin.request.disallow_ws", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateRequestBool, disallow_ws, zend_suhosin_globals, suhosin_globals)
     
@@ -986,17 +859,22 @@ PHP_INI_BEGIN()
         STD_PHP_INI_ENTRY("suhosin.upload.disallow_elf", "1", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateUploadBool, upload_disallow_elf, zend_suhosin_globals, suhosin_globals)
         STD_PHP_INI_ENTRY("suhosin.upload.disallow_binary", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateUploadBool, upload_disallow_binary, zend_suhosin_globals, suhosin_globals)
         STD_PHP_INI_ENTRY("suhosin.upload.remove_binary", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateUploadBool, upload_remove_binary, zend_suhosin_globals, suhosin_globals)
+#ifdef SUHOSIN_EXPERIMENTAL
+        STD_PHP_INI_BOOLEAN("suhosin.upload.allow_utf8", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateUploadBool, upload_allow_utf8, zend_suhosin_globals, suhosin_globals)
+#endif
         STD_PHP_INI_ENTRY("suhosin.upload.verification_script", NULL, PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateUploadString, upload_verification_script, zend_suhosin_globals, suhosin_globals)
 
 
-        STD_ZEND_INI_BOOLEAN("suhosin.sql.bailout_on_error",	"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateSQLBool, sql_bailout_on_error,	zend_suhosin_globals,	suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.sql.user_prefix", NULL, PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateSQLString, sql_user_prefix, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.sql.user_postfix", NULL, PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateSQLString, sql_user_postfix, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.sql.comment", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateSQLLong, sql_comment, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.sql.opencomment", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateSQLLong, sql_opencomment, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.sql.multiselect", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateSQLLong, sql_mselect, zend_suhosin_globals, suhosin_globals)
-        STD_PHP_INI_ENTRY("suhosin.sql.union", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateSQLLong, sql_union, zend_suhosin_globals, suhosin_globals)
-    
+        	STD_ZEND_INI_BOOLEAN("suhosin.sql.bailout_on_error",	"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateSQLBool, sql_bailout_on_error,	zend_suhosin_globals,	suhosin_globals)
+	STD_PHP_INI_ENTRY("suhosin.sql.user_prefix", NULL, PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateSQLString, sql_user_prefix, zend_suhosin_globals, suhosin_globals)
+	STD_PHP_INI_ENTRY("suhosin.sql.user_postfix", NULL, PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateSQLString, sql_user_postfix, zend_suhosin_globals, suhosin_globals)
+	STD_PHP_INI_ENTRY("suhosin.sql.user_match", NULL, PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateSQLString, sql_user_match, zend_suhosin_globals, suhosin_globals)
+	STD_PHP_INI_ENTRY("suhosin.sql.comment", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateSQLLong, sql_comment, zend_suhosin_globals, suhosin_globals)
+	STD_PHP_INI_ENTRY("suhosin.sql.opencomment", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateSQLLong, sql_opencomment, zend_suhosin_globals, suhosin_globals)
+	STD_PHP_INI_ENTRY("suhosin.sql.multiselect", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateSQLLong, sql_mselect, zend_suhosin_globals, suhosin_globals)
+	STD_PHP_INI_ENTRY("suhosin.sql.union", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateSQLLong, sql_union, zend_suhosin_globals, suhosin_globals)
+
+#ifdef HAVE_PHP_SESSION
 	STD_ZEND_INI_BOOLEAN("suhosin.session.encrypt",		"1",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, session_encrypt,	zend_suhosin_globals,	suhosin_globals)
 	STD_PHP_INI_ENTRY("suhosin.session.cryptkey", "", PHP_INI_ALL, OnUpdateString, session_cryptkey, zend_suhosin_globals, suhosin_globals)
 	STD_ZEND_INI_BOOLEAN("suhosin.session.cryptua",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, session_cryptua,	zend_suhosin_globals,	suhosin_globals)
@@ -1004,7 +882,10 @@ PHP_INI_BEGIN()
 	STD_PHP_INI_ENTRY("suhosin.session.cryptraddr", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, session_cryptraddr, zend_suhosin_globals, suhosin_globals)	
 	STD_PHP_INI_ENTRY("suhosin.session.checkraddr", "0", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, session_checkraddr, zend_suhosin_globals, suhosin_globals)	
 	STD_PHP_INI_ENTRY("suhosin.session.max_id_length", "128", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateLong, session_max_id_length, zend_suhosin_globals, suhosin_globals)
-	
+#else /* HAVE_PHP_SESSION */
+#warning BUILDING SUHOSIN WITHOUT SESSION SUPPORT
+#endif /* HAVE_PHP_SESSION */
+
 
 	STD_ZEND_INI_BOOLEAN("suhosin.cookie.encrypt",		"0",		ZEND_INI_PERDIR|ZEND_INI_SYSTEM,	OnUpdateBool, cookie_encrypt,	zend_suhosin_globals,	suhosin_globals)
 	STD_PHP_INI_ENTRY("suhosin.cookie.cryptkey", "", PHP_INI_SYSTEM|PHP_INI_PERDIR, OnUpdateString, cookie_cryptkey, zend_suhosin_globals, suhosin_globals)
@@ -1047,7 +928,7 @@ char *suhosin_getenv(char *name, size_t name_len TSRMLS_DC)
 		tmp = getenv(name);
 		efree(name);
 		if (tmp) {
-			return(estrdup(tmp));
+			return estrdup(tmp);
 		}
 	}
 	return NULL;
@@ -1081,7 +962,6 @@ PHP_MINIT_FUNCTION(suhosin)
 	ZEND_INIT_MODULE_GLOBALS(suhosin, php_suhosin_init_globals, NULL);
 
 	/* only register constants if they have not previously been registered by a possible patched PHP */
-	
 	if (zend_hash_exists(EG(zend_constants), "S_MEMORY", sizeof("S_MEMORY"))==0) {
 		REGISTER_MAIN_LONG_CONSTANT("S_MEMORY", S_MEMORY, CONST_PERSISTENT | CONST_CS);
 		REGISTER_MAIN_LONG_CONSTANT("S_VARS", S_VARS, CONST_PERSISTENT | CONST_CS);
@@ -1142,11 +1022,13 @@ PHP_MINIT_FUNCTION(suhosin)
 		zend_ini_entry *i;
 		if (zend_hash_find(EG(ini_directives), "display_errors", sizeof("display_errors"), (void **) &i) == SUCCESS) {
 			if (i->on_modify) {
+				i->on_modify(i, "0", 1, i->mh_arg1, i->mh_arg2, i->mh_arg3, ZEND_INI_STAGE_STARTUP TSRMLS_CC);
 				if (SUHOSIN_G(disable_display_errors) > 1) {
-					zend_alter_ini_entry_ex("display_errors", sizeof("display_errors"), "0", sizeof("0"), ZEND_INI_SYSTEM, ZEND_INI_STAGE_STARTUP, 0 TSRMLS_CC);
+					i->value = "0";
+					i->modified = 0;
+					i->value_length = strlen(i->value);
 					i->on_modify = OnUpdate_fail;
 				} else {
-					i->on_modify(i, "Off", sizeof("off"), i->mh_arg1, i->mh_arg2, i->mh_arg3, ZEND_INI_STAGE_STARTUP TSRMLS_CC);
 					i->on_modify = NULL;
 				}
 			}
@@ -1167,9 +1049,9 @@ PHP_MINIT_FUNCTION(suhosin)
 	}
 
 	/* now hook a bunch of stuff */
-	suhosin_hook_memory_limit();
-	suhosin_hook_sha256();
-	suhosin_hook_ex_imp();
+	suhosin_hook_memory_limit(TSRMLS_C);
+	suhosin_hook_sha256(TSRMLS_C);
+	suhosin_hook_ex_imp(TSRMLS_C);
 
 #if PHP_VERSION_ID < 50500
 	/* register the logo for phpinfo */
@@ -1177,10 +1059,14 @@ PHP_MINIT_FUNCTION(suhosin)
 #endif
 
 #if PHP_MAJOR_VERSION < 5
-	php_error_docref(NULL TSRMLS_CC, E_ERROR, "Suhosin Extension is not designed to run with PHP 4 and below. Erroring Out.");
+#error Suhosin Extension is not designed to run with PHP 4 and below.
 #endif
-#if PHP_MAJOR_VERSION == 5 && PHP_MINOR_VERSION <= 2
+#if PHP_MAJOR_VERSION == 5 && PHP_MINOR_VERSION <= 2 && !SUHOSIN_DEBUG
 	php_error_docref(NULL TSRMLS_CC, E_WARNING, "Suhosin Extension does not officially support PHP 5.2 and below anymore, because it is discontinued. Use it at your own risk.");
+#endif
+
+#if !defined(HAVE_PHP_SESSION) && !defined(SUHOSIN_NO_SESSION_WARNING)
+	php_error_docref(NULL TSRMLS_CC, E_WARNING, "Suhosin was compiled without session support, which is probably not what you want. All session related features will not be available, e.g. session encryption. If session support is really not needed, recompile Suhosin with -DSUHOSIN_NO_SESSION_WARNING=1 to suppress this warning.");
 #endif
 
 	return SUCCESS;

@@ -30,68 +30,19 @@
 #include "php_suhosin.h"
 #include "php_variables.h"
 #include "suhosin_rfc1867.h"
+#include "ext/standard/php_var.h"
 
-PHP_SUHOSIN_API int (*old_rfc1867_callback)(unsigned int event, void *event_data, void **extra TSRMLS_DC) = NULL;
 #if !HAVE_RFC1867_CALLBACK
 PHP_SUHOSIN_API int (*php_rfc1867_callback)(unsigned int event, void *event_data, void **extra TSRMLS_DC) = NULL;
 #endif
 
-static int is_protected_varname(char *var, int var_len)
-{
-	switch (var_len) {
-	    case 18:
-		if (memcmp(var, "HTTP_RAW_POST_DATA", 18)==0) goto protected_varname2;
-		break;
-	    case 17:
-		if (memcmp(var, "HTTP_SESSION_VARS", 17)==0) goto protected_varname2;
-		break;
-	    case 16:
-		if (memcmp(var, "HTTP_SERVER_VARS", 16)==0) goto protected_varname2;
-		if (memcmp(var, "HTTP_COOKIE_VARS", 16)==0) goto protected_varname2;
-		break;
-	    case 15:
-		if (memcmp(var, "HTTP_POST_FILES", 15)==0) goto protected_varname2;
-		break;
-	    case 14:
-		if (memcmp(var, "HTTP_POST_VARS", 14)==0) goto protected_varname2;
-		break;
-	    case 13:
-		if (memcmp(var, "HTTP_GET_VARS", 13)==0) goto protected_varname2;
-		if (memcmp(var, "HTTP_ENV_VARS", 13)==0) goto protected_varname2;
-		break;
-	    case 8:
-		if (memcmp(var, "_SESSION", 8)==0) goto protected_varname2;
-		if (memcmp(var, "_REQUEST", 8)==0) goto protected_varname2;
-		break;
-	    case 7:
-		if (memcmp(var, "GLOBALS", 7)==0) goto protected_varname2;
-		if (memcmp(var, "_COOKIE", 7)==0) goto protected_varname2;
-		if (memcmp(var, "_SERVER", 7)==0) goto protected_varname2;
-		break;
-	    case 6:
-		if (memcmp(var, "_FILES", 6)==0) goto protected_varname2;
-		break;
-	    case 5:
-		if (memcmp(var, "_POST", 5)==0) goto protected_varname2;
-		break;
-	    case 4:
-		if (memcmp(var, "_ENV", 4)==0) goto protected_varname2;
-		if (memcmp(var, "_GET", 4)==0) goto protected_varname2;
-		break;
-	}
-
-	return 0;
-protected_varname2:	
-	return 1;
-}
 
 /* {{{ SAPI_UPLOAD_VARNAME_FILTER_FUNC
  */
-static int check_fileupload_varname(char *varname)
+static int check_fileupload_varname(char *varname TSRMLS_DC)
 {
 	char *index, *prev_index = NULL, *var;
 	unsigned int var_len, total_len, depth = 0;
-	TSRMLS_FETCH();
 
 	var = estrdup(varname);
 
@@ -160,6 +111,24 @@ static int check_fileupload_varname(char *varname)
 			}
 		} 
 		
+		/* index whitelist/blacklist */
+		if (SUHOSIN_G(array_index_whitelist) && *(SUHOSIN_G(array_index_whitelist))) {
+			if (suhosin_strnspn(index, index_length, SUHOSIN_G(array_index_whitelist)) != index_length) {
+				suhosin_log(S_VARS, "array index contains not whitelisted characters - dropped variable '%s'", var);
+				if (!SUHOSIN_G(simulation)) {
+					goto return_failure;
+				}
+			}
+		} else if (SUHOSIN_G(array_index_blacklist) && *(SUHOSIN_G(array_index_blacklist))) {
+			if (suhosin_strncspn(index, index_length, SUHOSIN_G(array_index_blacklist)) != index_length) {
+				suhosin_log(S_VARS, "array index contains blacklisted characters - dropped variable '%s'", var);
+				if (!SUHOSIN_G(simulation)) {
+					goto return_failure;
+				}
+			}
+		}
+		
+		
 		index = strchr(index, '[');		
 	}
 	
@@ -180,8 +149,7 @@ static int check_fileupload_varname(char *varname)
 	
 	/* Drop this variable if it is one of GLOBALS, _GET, _POST, ... */
 	/* This is to protect several silly scripts that do globalizing themself */
-	
-	if (is_protected_varname(var, var_len)) {
+	if (php_varname_check(var, var_len, 1 TSRMLS_CC) == FAILURE || suhosin_is_protected_varname(var, var_len)) {
 		suhosin_log(S_FILES, "tried to register forbidden variable '%s' through FILE variables", var);
 		if (!SUHOSIN_G(simulation)) {
 			goto return_failure;
@@ -196,6 +164,34 @@ return_failure:
 	return FAILURE;	
 }
 /* }}} */
+
+#ifdef SUHOSIN_EXPERIMENTAL
+static inline int suhosin_validate_utf8_multibyte(const char* cp, size_t maxlen)
+{
+	if (maxlen < 2 || !(*cp & 0x80)) { return 0; }
+	if ((*cp & 0xe0) == 0xc0 &&					// 1st byte is 110xxxxx
+		(*(cp+1) & 0xc0) == 0x80 &&				// 2nd byte is 10xxxxxx
+		(*cp & 0x1e)) {							// overlong check 110[xxxx]x 10xxxxxx
+			 return 2;
+	}
+	if (maxlen < 3) { return 0; }
+	if ((*cp & 0xf0) == 0xe0 &&					// 1st byte is 1110xxxx
+		(*(cp+1) & 0xc0) == 0x80 &&				// 2nd byte is 10xxxxxx
+		(*(cp+2) & 0xc0) == 0x80 &&				// 3rd byte is 10xxxxxx
+		((*cp & 0x0f) | (*(cp+1) & 0x20))) {	// 1110[xxxx] 10[x]xxxxx 10xxxxxx
+			return 3;
+	}
+	if (maxlen < 4) { return 0; }
+	if ((*cp & 0xf8) == 0xf0 &&				// 1st byte is 11110xxx
+		(*(cp+1) & 0xc0) == 0x80 &&				// 2nd byte is 10xxxxxx
+		(*(cp+2) & 0xc0) == 0x80 &&				// 3rd byte is 10xxxxxx
+		(*(cp+3) & 0xc0) == 0x80 &&				// 4th byte is 10xxxxxx
+		((*cp & 0x07) | (*(cp+1) & 0x30))) {	// 11110[xxx] 10[xx]xxxx 10xxxxxx 10xxxxxx
+			return 4;
+	}
+	return 0;
+}
+#endif
 
 int suhosin_rfc1867_filter(unsigned int event, void *event_data, void **extra TSRMLS_DC)
 {
@@ -228,7 +224,7 @@ int suhosin_rfc1867_filter(unsigned int event, void *event_data, void **extra TS
 		  		}
 		    
 			    
-			    if (check_fileupload_varname(mefs->name) == FAILURE) {
+			    if (check_fileupload_varname(mefs->name TSRMLS_CC) == FAILURE) {
 				    goto continue_with_failure;
 			    }
 		    }
@@ -250,38 +246,64 @@ int suhosin_rfc1867_filter(unsigned int event, void *event_data, void **extra TS
 			    }
 		    }
 		    
-		    if (SUHOSIN_G(upload_disallow_binary)) {
-		    
-			    multipart_event_file_data *mefd = (multipart_event_file_data *) event_data;
-			    size_t i;
-			    
-			    for (i=0; i<mefd->length; i++) {
-				    if (mefd->data[i] < 32 && !isspace(mefd->data[i])) {
-					    suhosin_log(S_FILES, "uploaded file contains binary data - file dropped");
-					    if (!SUHOSIN_G(simulation)) {
-						    goto continue_with_failure;
-					    }
-				    }
-			    }
-		    }
+			if (SUHOSIN_G(upload_disallow_binary)) {
+			
+				multipart_event_file_data *mefd = (multipart_event_file_data *) event_data;
 
-		    if (SUHOSIN_G(upload_remove_binary)) {
-		    
-			    multipart_event_file_data *mefd = (multipart_event_file_data *) event_data;
-			    size_t i, j;
-			    
-			    for (i=0, j=0; i<mefd->length; i++) {
-				    if (mefd->data[i] >= 32 || isspace(mefd->data[i])) {
-					    mefd->data[j++] = mefd->data[i];
-				    }
-			    }
-			    SDEBUG("removing binary %u %u",i,j);
-			    /* IMPORTANT FOR DAISY CHAINING */
-			    mefd->length = j;
-			    if (mefd->newlength) {
-				    *mefd->newlength = j;
-			    }
-		    }
+				char *cp, *cpend;
+				int n;
+				cpend = mefd->data + mefd->length;
+				for (cp = mefd->data; cp < cpend; cp++) {
+					if (*cp >= 32 || isspace(*cp)) {
+						continue;
+					}
+#ifdef SUHOSIN_EXPERIMENTAL
+					if ((*cp & 0x80) && SUHOSIN_G(upload_allow_utf8)) {
+						SDEBUG("checking char %x", *cp);
+						if ((n = suhosin_validate_utf8_multibyte(cp, cpend-cp))) { // valid UTF8 multibyte character
+							cp += n - 1;
+							continue;
+						}
+					}
+#endif
+					suhosin_log(S_FILES, "uploaded file contains binary data - file dropped");
+					if (!SUHOSIN_G(simulation)) {
+						goto continue_with_failure;
+					}
+					break;
+				}
+			}
+
+			if (SUHOSIN_G(upload_remove_binary)) {
+			
+				multipart_event_file_data *mefd = (multipart_event_file_data *) event_data;
+				size_t i, j;
+				int n;
+				
+				for (i=0, j=0; i<mefd->length; i++) {
+					if (mefd->data[i] >= 32 || isspace(mefd->data[i])) {
+						mefd->data[j++] = mefd->data[i];
+					}
+#ifdef SUHOSIN_EXPERIMENTAL
+					else if (SUHOSIN_G(upload_allow_utf8) && mefd->data[i] & 0x80) {
+						n = suhosin_validate_utf8_multibyte(mefd->data + i, mefd->length - i);
+						if (!n) { continue; }
+						while (n--) {
+							mefd->data[j++] = mefd->data[i++];
+						}
+						i--;
+					}
+#endif
+				}
+				mefd->data[j] = '\0';
+				
+				SDEBUG("removing binary %zu %zu",i,j);
+				/* IMPORTANT FOR DAISY CHAINING */
+				mefd->length = j;
+				if (mefd->newlength) {
+					*mefd->newlength = j;
+				}
+			}
 		    
 		    break;
 
