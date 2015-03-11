@@ -1,4 +1,4 @@
-php-suhosin (0.9.36-1) UNRELEASED; urgency=medium
+php-suhosin (0.9.37-1~1.gbp616d54) UNRELEASED; urgency=medium
 
   * [a0f5f76] Imported Upstream version 0.9.36
     (Closes: #675312, #680145, #718145, #696470)
@@ -10,8 +10,11 @@ php-suhosin (0.9.36-1) UNRELEASED; urgency=medium
   * [5ad4d64] Setting suhosin.mail.protect to defaults with
     05_ini_set_suhosin.mail.protect_defaults
   * [5d98fa3] Removing debian/suhosin.ini and upstream one
+  * [cc40ba3] travis-ci: don't install build-deps manual
+  * [ceecd05] Adjusting watch file to use the correct pattern
+  * [b708762] Imported Upstream version 0.9.37
 
- -- Jan Wagner <waja@cyconet.org>  Tue, 01 Jul 2014 14:58:53 +0200
+ -- Jan Wagner <waja@cyconet.org>  Wed, 11 Mar 2015 09:26:38 +0100
 
 php-suhosin (0.9.33-4) UNRELEASED; urgency=low
 
