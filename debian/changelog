@@ -1,4 +1,4 @@
-php-suhosin (0.9.37.1-1~1.gbpd3a1dc) UNRELEASED; urgency=medium
+php-suhosin (0.9.37.1-1) unstable; urgency=medium
 
   * [a0f5f76] Imported Upstream version 0.9.36
     (Closes: #675312, #680145, #718145, #696470)
@@ -17,8 +17,10 @@ php-suhosin (0.9.37.1-1~1.gbpd3a1dc) UNRELEASED; urgency=medium
   * [4859dff] travis-ci: don't install build-deps manual
   * [f8ddee1] travis-ci: build package with dpkg-buildpackage
   * [5eacaf1] Imported Upstream version 0.9.37.1
+  * [1371241] watch: Upstream switched from .tgz to .tar.gz suffix
+  * [1c0c975] Bump Standards-Version to 3.9.6, no changes needed
 
- -- Jan Wagner <waja@cyconet.org>  Tue, 31 Mar 2015 20:30:03 +0200
+ -- Jan Wagner <waja@cyconet.org>  Tue, 31 Mar 2015 20:56:14 +0200
 
 php-suhosin (0.9.33-4) UNRELEASED; urgency=low
 
