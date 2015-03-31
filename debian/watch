@@ -1,4 +1,4 @@
 version=3
 opts=downloadurlmangle=s/https/http/ \
 http://www.suhosin.org/stories/download.html \
-https://download.suhosin.org/suhosin-(.*)\.tgz
+https://download.suhosin.org/suhosin-(.*)\.tar.gz
