@@ -7,7 +7,7 @@ Build-Depends: debhelper (>= 5), php5-dev (>= 5.2.0)
 Homepage: http://www.suhosin.org
 Vcs-Browser: https://github.com/waja/php-suhosin
 Vcs-Git: https://github.com/waja/php-suhosin.git
-Standards-Version: 3.9.4
+Standards-Version: 3.9.6
 
 Package: php5-suhosin
 Architecture: any
