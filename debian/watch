@@ -1,4 +1,4 @@
 version=3
-opts=downloadurlmangle=s/https/http/ \
+opts=downloadurlmangle=s/https/http/,pgpsigurlmangle=s/$/.sig/ \
 http://www.suhosin.org/stories/download.html \
 https://download.suhosin.org/suhosin-(.*)\.tar.gz
